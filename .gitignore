@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+backups/
+_static/
+_templates/
+docs/build/
+.rsync_exclude
+
+# SSH keys (keep structure but ignore content)
+ssh/*.pub
+ssh/new
+ssh/progressus
+
+# Images and UML files (optional - remove if you want to track them)
+# description_before_start_and_commands.png
+# CJM.uml
