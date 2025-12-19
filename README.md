@@ -240,6 +240,3 @@ celery -A celery_app.celery_worker worker --loglevel=info
 ## Лицензия
 
 MIT
-
-#   p r o g r e s s u s  
- 
