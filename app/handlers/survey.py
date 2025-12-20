@@ -223,7 +223,15 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
     await state.update_data(gender=gender)
     
     # Обновляем клавиатуру с галочкой
-    await callback.message.edit_reply_markup(reply_markup=get_gender_keyboard(selected_gender=gender))
+    try:
+        await callback.message.edit_reply_markup(reply_markup=get_gender_keyboard(selected_gender=gender))
+    except Exception as e:
+        # Если не удалось обновить только клавиатуру, обновляем все сообщение
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        await callback.message.edit_text(
+            "Твой пол?",
+            reply_markup=get_gender_keyboard(selected_gender=gender)
+        )
     
     # Сохраняем состояние в БД
     async for session in get_db():
@@ -242,9 +250,7 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
         break
     
     await state.set_state(SurveyStates.age)
-    await callback.message.edit_text(
-        "Сколько тебе лет? (Напиши число)"
-    )
+    await callback.message.answer("Сколько тебе лет? (Напиши число)")
     await callback.answer()
 
 
@@ -352,7 +358,18 @@ async def process_value_selection(callback: CallbackQuery, state: FSMContext):
     # Обновляем клавиатуру с галочками
     count = len(selected_values[user_id])
     keyboard = get_values_keyboard(selected_values=selected_values[user_id])
-    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    
+    # Обновляем только клавиатуру (текст сообщения остается прежним)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception as e:
+        # Если не удалось обновить только клавиатуру, обновляем все сообщение
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        current_text = callback.message.text or callback.message.caption or "Выбери 3 своих основных ценности в жизни:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
+        await callback.message.edit_text(
+            current_text,
+            reply_markup=keyboard
+        )
     
     # Обновляем текст кнопки "Готово"
     if count == 3:
@@ -427,7 +444,18 @@ async def process_sphere_selection(callback: CallbackQuery, state: FSMContext):
     # Обновляем клавиатуру с галочками
     count = len(selected_spheres[user_id])
     keyboard = get_development_spheres_keyboard(selected_spheres=selected_spheres[user_id])
-    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    
+    # Обновляем только клавиатуру (текст сообщения остается прежним)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception as e:
+        # Если не удалось обновить только клавиатуру, обновляем все сообщение
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        current_text = callback.message.text or callback.message.caption or "Выбери сферы, в которых хочешь развиваться:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
+        await callback.message.edit_text(
+            current_text,
+            reply_markup=keyboard
+        )
     
     await callback.answer(f"Выбрано: {count}", show_alert=False)
 
@@ -604,7 +632,15 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
     await state.update_data(role_model=role_model)
     
     # Обновляем клавиатуру с галочкой
-    await callback.message.edit_reply_markup(reply_markup=get_role_model_keyboard(selected_role=role_model))
+    try:
+        await callback.message.edit_reply_markup(reply_markup=get_role_model_keyboard(selected_role=role_model))
+    except Exception as e:
+        # Если не удалось обновить только клавиатуру, обновляем все сообщение
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        await callback.message.edit_text(
+            "Отлично! Теперь выбери свою ролевую модель:",
+            reply_markup=get_role_model_keyboard(selected_role=role_model)
+        )
     
     # Сохраняем состояние в БД
     async for session in get_db():
@@ -621,7 +657,7 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
         break
     
     await state.set_state(SurveyStates.goal_3months)
-    await callback.message.edit_text(
+    await callback.message.answer(
         "Отлично! Теперь напиши свою цель на ближайшие 3 месяца:\n"
         "(Опиши конкретно, что ты хочешь достичь)"
     )
