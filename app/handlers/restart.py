@@ -83,7 +83,7 @@ async def restart_confirm(callback: CallbackQuery, state: FSMContext):
     )
     # Устанавливаем постоянную клавиатуру
     await callback.message.answer(
-        "",
+        "Используй кнопки ниже для навигации",
         reply_markup=get_main_keyboard()
     )
     await callback.answer("Данные сброшены!")
@@ -103,7 +103,7 @@ async def restart_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Рестарт отменен.")
     # Устанавливаем постоянную клавиатуру
     await callback.message.answer(
-        "",
+        "Используй кнопки ниже для навигации",
         reply_markup=get_main_keyboard()
     )
     await callback.answer("Рестарт отменен")

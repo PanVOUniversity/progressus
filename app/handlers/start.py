@@ -117,7 +117,7 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                                 await message.answer("Продолжаем опрос...")
                             
                             await message.answer(
-                                "",
+                                "Используй кнопки ниже для навигации",
                                 reply_markup=get_main_keyboard()
                             )
                             return True

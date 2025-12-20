@@ -222,16 +222,16 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
     gender = gender_map.get(callback.data, "Мужской")
     await state.update_data(gender=gender)
     
-    # Обновляем клавиатуру с галочкой
-    try:
-        await callback.message.edit_reply_markup(reply_markup=get_gender_keyboard(selected_gender=gender))
-    except Exception as e:
-        # Если не удалось обновить только клавиатуру, обновляем все сообщение
-        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
-        await callback.message.edit_text(
-            "Твой пол?",
-            reply_markup=get_gender_keyboard(selected_gender=gender)
-        )
+    # Получаем текст сообщения или используем стандартный
+    current_text = callback.message.text or callback.message.caption
+    if not current_text:
+        current_text = "Твой пол?"
+    
+    # Обновляем сообщение с клавиатурой, показывая галочку
+    await callback.message.edit_text(
+        current_text,
+        reply_markup=get_gender_keyboard(selected_gender=gender)
+    )
     
     # Сохраняем состояние в БД
     async for session in get_db():
@@ -359,17 +359,18 @@ async def process_value_selection(callback: CallbackQuery, state: FSMContext):
     count = len(selected_values[user_id])
     keyboard = get_values_keyboard(selected_values=selected_values[user_id])
     
-    # Обновляем только клавиатуру (текст сообщения остается прежним)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=keyboard)
-    except Exception as e:
-        # Если не удалось обновить только клавиатуру, обновляем все сообщение
-        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
-        current_text = callback.message.text or callback.message.caption or "Выбери 3 своих основных ценности в жизни:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
-        await callback.message.edit_text(
-            current_text,
-            reply_markup=keyboard
-        )
+    # Получаем текст сообщения или используем стандартный
+    current_text = callback.message.text or callback.message.caption
+    if not current_text:
+        data = await state.get_data()
+        user_name = data.get("name", "друг")
+        current_text = f"Приятно познакомиться, {user_name}! 👋\n\nВыбери 3 своих основных ценности в жизни:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
+    
+    # Обновляем сообщение с клавиатурой
+    await callback.message.edit_text(
+        current_text,
+        reply_markup=keyboard
+    )
     
     # Обновляем текст кнопки "Готово"
     if count == 3:
@@ -445,17 +446,16 @@ async def process_sphere_selection(callback: CallbackQuery, state: FSMContext):
     count = len(selected_spheres[user_id])
     keyboard = get_development_spheres_keyboard(selected_spheres=selected_spheres[user_id])
     
-    # Обновляем только клавиатуру (текст сообщения остается прежним)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=keyboard)
-    except Exception as e:
-        # Если не удалось обновить только клавиатуру, обновляем все сообщение
-        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
-        current_text = callback.message.text or callback.message.caption or "Выбери сферы, в которых хочешь развиваться:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
-        await callback.message.edit_text(
-            current_text,
-            reply_markup=keyboard
-        )
+    # Получаем текст сообщения или используем стандартный
+    current_text = callback.message.text or callback.message.caption
+    if not current_text:
+        current_text = "Выбери сферы, в которых хочешь развиваться:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
+    
+    # Обновляем сообщение с клавиатурой
+    await callback.message.edit_text(
+        current_text,
+        reply_markup=keyboard
+    )
     
     await callback.answer(f"Выбрано: {count}", show_alert=False)
 
@@ -631,16 +631,16 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
     role_model = role_map.get(callback.data, "Эндрю Тейт")
     await state.update_data(role_model=role_model)
     
-    # Обновляем клавиатуру с галочкой
-    try:
-        await callback.message.edit_reply_markup(reply_markup=get_role_model_keyboard(selected_role=role_model))
-    except Exception as e:
-        # Если не удалось обновить только клавиатуру, обновляем все сообщение
-        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
-        await callback.message.edit_text(
-            "Отлично! Теперь выбери свою ролевую модель:",
-            reply_markup=get_role_model_keyboard(selected_role=role_model)
-        )
+    # Получаем текст сообщения или используем стандартный
+    current_text = callback.message.text or callback.message.caption
+    if not current_text:
+        current_text = "Отлично! Теперь выбери свою ролевую модель:"
+    
+    # Обновляем сообщение с клавиатурой, показывая галочку
+    await callback.message.edit_text(
+        current_text,
+        reply_markup=get_role_model_keyboard(selected_role=role_model)
+    )
     
     # Сохраняем состояние в БД
     async for session in get_db():
