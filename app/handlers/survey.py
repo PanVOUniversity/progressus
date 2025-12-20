@@ -477,11 +477,16 @@ async def process_spheres_done(callback: CallbackQuery, state: FSMContext):
         
         await state.set_state(SurveyStates.detailed_questions)
         
-        # Задаем первый вопрос
-        await callback.message.edit_text(
-            f"Отлично! Теперь ответь на несколько развернутых вопросов:\n\n"
-            f"1. {detailed_questions[0]}"
-        )
+        # Задаем первый вопрос (отдельным сообщением, без нумерации)
+        first_question = detailed_questions[0]
+        if isinstance(first_question, dict):
+            question_text = first_question.get("question", "")
+        else:
+            # Для обратной совместимости со старым форматом
+            question_text = first_question
+        
+        await callback.message.edit_text("Отлично! Теперь ответь на несколько вопросов:")
+        await callback.message.answer(question_text)
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
@@ -503,7 +508,20 @@ async def process_detailed_answer(message: Message, state: FSMContext):
     
     # Сохраняем ответ на текущий вопрос
     if current_index < len(detailed_questions):
-        detailed_answers[f"question_{current_index + 1}"] = message.text
+        current_question = detailed_questions[current_index]
+        
+        # Определяем ключ для ответа
+        if isinstance(current_question, dict):
+            sphere = current_question.get("sphere", "")
+            question_num = sum(1 for i in range(current_index) 
+                             if isinstance(detailed_questions[i], dict) 
+                             and detailed_questions[i].get("sphere") == sphere) + 1
+            answer_key = f"{sphere}_question_{question_num}"
+        else:
+            # Для обратной совместимости со старым форматом
+            answer_key = f"question_{current_index + 1}"
+        
+        detailed_answers[answer_key] = message.text
         await state.update_data(detailed_answers=detailed_answers)
     
     # Переходим к следующему вопросу
@@ -526,9 +544,16 @@ async def process_detailed_answer(message: Message, state: FSMContext):
                 logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
             break
         
-        await message.answer(
-            f"{next_index + 1}. {detailed_questions[next_index]}"
-        )
+        # Получаем следующий вопрос
+        next_question = detailed_questions[next_index]
+        if isinstance(next_question, dict):
+            question_text = next_question.get("question", "")
+        else:
+            # Для обратной совместимости со старым форматом
+            question_text = next_question
+        
+        # Отправляем следующий вопрос отдельным сообщением (без нумерации)
+        await message.answer(question_text)
     else:
         # Все вопросы отвечены, переходим к выбору ролевой модели
         # Сохраняем состояние в БД

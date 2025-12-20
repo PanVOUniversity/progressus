@@ -84,9 +84,13 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                                 detailed_questions = state_data.get("detailed_questions", [])
                                 current_index = state_data.get("current_question_index", 0)
                                 if detailed_questions and current_index < len(detailed_questions):
-                                    await message.answer(
-                                        f"{current_index + 1}. {detailed_questions[current_index]}"
-                                    )
+                                    current_question = detailed_questions[current_index]
+                                    # Поддерживаем как новый формат (словарь), так и старый (строка)
+                                    if isinstance(current_question, dict):
+                                        question_text = current_question.get("question", "")
+                                    else:
+                                        question_text = current_question
+                                    await message.answer(question_text)
                             elif state_name == "role_model":
                                 await message.answer(
                                     "Отлично! Теперь выбери свою ролевую модель:",
