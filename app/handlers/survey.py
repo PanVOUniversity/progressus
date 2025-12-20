@@ -222,16 +222,11 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
     gender = gender_map.get(callback.data, "Мужской")
     await state.update_data(gender=gender)
     
-    # Получаем текст сообщения или используем стандартный
-    current_text = callback.message.text or callback.message.caption
-    if not current_text:
-        current_text = "Твой пол?"
-    
-    # Обновляем сообщение с клавиатурой, показывая галочку
-    await callback.message.edit_text(
-        current_text,
+    # Обновляем только клавиатуру с галочкой
+    await callback.message.edit_reply_markup(
         reply_markup=get_gender_keyboard(selected_gender=gender)
     )
+    await callback.answer()  # Убираем индикатор загрузки
     
     # Сохраняем состояние в БД
     async for session in get_db():
@@ -251,7 +246,6 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
     
     await state.set_state(SurveyStates.age)
     await callback.message.answer("Сколько тебе лет? (Напиши число)")
-    await callback.answer()
 
 
 @router.message(SurveyStates.age)
@@ -355,24 +349,12 @@ async def process_value_selection(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("Можно выбрать только 3 ценности", show_alert=True)
                 return
     
-    # Обновляем клавиатуру с галочками
+    # Обновляем только клавиатуру с галочками
     count = len(selected_values[user_id])
     keyboard = get_values_keyboard(selected_values=selected_values[user_id])
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
     
-    # Получаем текст сообщения или используем стандартный
-    current_text = callback.message.text or callback.message.caption
-    if not current_text:
-        data = await state.get_data()
-        user_name = data.get("name", "друг")
-        current_text = f"Приятно познакомиться, {user_name}! 👋\n\nВыбери 3 своих основных ценности в жизни:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
-    
-    # Обновляем сообщение с клавиатурой
-    await callback.message.edit_text(
-        current_text,
-        reply_markup=keyboard
-    )
-    
-    # Обновляем текст кнопки "Готово"
+    # Отвечаем на callback, чтобы убрать индикатор загрузки
     if count == 3:
         await callback.answer(f"Выбрано 3 ценности. Нажми '✅ Готово'", show_alert=False)
     else:
@@ -442,21 +424,12 @@ async def process_sphere_selection(callback: CallbackQuery, state: FSMContext):
         else:
             selected_spheres[user_id].append(sphere)
     
-    # Обновляем клавиатуру с галочками
+    # Обновляем только клавиатуру с галочками
     count = len(selected_spheres[user_id])
     keyboard = get_development_spheres_keyboard(selected_spheres=selected_spheres[user_id])
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
     
-    # Получаем текст сообщения или используем стандартный
-    current_text = callback.message.text or callback.message.caption
-    if not current_text:
-        current_text = "Выбери сферы, в которых хочешь развиваться:\n(Можно выбрать несколько, затем нажми '✅ Готово')"
-    
-    # Обновляем сообщение с клавиатурой
-    await callback.message.edit_text(
-        current_text,
-        reply_markup=keyboard
-    )
-    
+    # Отвечаем на callback, чтобы убрать индикатор загрузки
     await callback.answer(f"Выбрано: {count}", show_alert=False)
 
 
@@ -631,16 +604,11 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
     role_model = role_map.get(callback.data, "Эндрю Тейт")
     await state.update_data(role_model=role_model)
     
-    # Получаем текст сообщения или используем стандартный
-    current_text = callback.message.text or callback.message.caption
-    if not current_text:
-        current_text = "Отлично! Теперь выбери свою ролевую модель:"
-    
-    # Обновляем сообщение с клавиатурой, показывая галочку
-    await callback.message.edit_text(
-        current_text,
+    # Обновляем только клавиатуру с галочкой
+    await callback.message.edit_reply_markup(
         reply_markup=get_role_model_keyboard(selected_role=role_model)
     )
+    await callback.answer()  # Убираем индикатор загрузки
     
     # Сохраняем состояние в БД
     async for session in get_db():
@@ -661,7 +629,6 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
         "Отлично! Теперь напиши свою цель на ближайшие 3 месяца:\n"
         "(Опиши конкретно, что ты хочешь достичь)"
     )
-    await callback.answer()
 
 
 @router.message(SurveyStates.goal_3months)
