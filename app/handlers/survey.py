@@ -222,6 +222,9 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
     gender = gender_map.get(callback.data, "Мужской")
     await state.update_data(gender=gender)
     
+    # Обновляем клавиатуру с галочкой
+    await callback.message.edit_reply_markup(reply_markup=get_gender_keyboard(selected_gender=gender))
+    
     # Сохраняем состояние в БД
     async for session in get_db():
         try:
@@ -342,10 +345,15 @@ async def process_value_selection(callback: CallbackQuery, state: FSMContext):
         else:
             if len(selected_values[user_id]) < 3:
                 selected_values[user_id].append(value)
+            else:
+                await callback.answer("Можно выбрать только 3 ценности", show_alert=True)
+                return
     
-    # Обновляем клавиатуру с количеством выбранных
+    # Обновляем клавиатуру с галочками
     count = len(selected_values[user_id])
-    keyboard = get_values_keyboard()
+    keyboard = get_values_keyboard(selected_values=selected_values[user_id])
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    
     # Обновляем текст кнопки "Готово"
     if count == 3:
         await callback.answer(f"Выбрано 3 ценности. Нажми '✅ Готово'", show_alert=False)
@@ -416,7 +424,11 @@ async def process_sphere_selection(callback: CallbackQuery, state: FSMContext):
         else:
             selected_spheres[user_id].append(sphere)
     
+    # Обновляем клавиатуру с галочками
     count = len(selected_spheres[user_id])
+    keyboard = get_development_spheres_keyboard(selected_spheres=selected_spheres[user_id])
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    
     await callback.answer(f"Выбрано: {count}", show_alert=False)
 
 
@@ -590,6 +602,9 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
     
     role_model = role_map.get(callback.data, "Эндрю Тейт")
     await state.update_data(role_model=role_model)
+    
+    # Обновляем клавиатуру с галочкой
+    await callback.message.edit_reply_markup(reply_markup=get_role_model_keyboard(selected_role=role_model))
     
     # Сохраняем состояние в БД
     async for session in get_db():

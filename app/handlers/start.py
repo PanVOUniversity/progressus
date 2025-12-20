@@ -56,9 +56,10 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                             
                             # Показываем соответствующее сообщение в зависимости от состояния
                             if state_name == "gender":
+                                gender = state_data.get("gender")
                                 await message.answer(
                                     "Продолжаем опрос. Твой пол?",
-                                    reply_markup=get_gender_keyboard()
+                                    reply_markup=get_gender_keyboard(selected_gender=gender)
                                 )
                             elif state_name == "age":
                                 await message.answer("Сколько тебе лет? (Напиши число)")
@@ -69,16 +70,26 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                                 else:
                                     await message.answer("Как тебя зовут? (Напиши свое имя)")
                             elif state_name == "values":
+                                # Восстанавливаем выбранные ценности
+                                from app.handlers.survey import selected_values
+                                values = state_data.get("values", [])
+                                selected_values[user_id] = values.copy() if values else []
+                                
                                 await message.answer(
                                     "Выбери 3 своих основных ценности в жизни:\n"
                                     "(Можно выбрать несколько, затем нажми '✅ Готово')",
-                                    reply_markup=get_values_keyboard()
+                                    reply_markup=get_values_keyboard(selected_values=values)
                                 )
                             elif state_name == "development_spheres":
+                                # Восстанавливаем выбранные сферы
+                                from app.handlers.survey import selected_spheres
+                                spheres = state_data.get("development_spheres", [])
+                                selected_spheres[user_id] = spheres.copy() if spheres else []
+                                
                                 await message.answer(
                                     "Выбери сферы, в которых хочешь развиваться:\n"
                                     "(Можно выбрать несколько, затем нажми '✅ Готово')",
-                                    reply_markup=get_development_spheres_keyboard()
+                                    reply_markup=get_development_spheres_keyboard(selected_spheres=spheres)
                                 )
                             elif state_name == "detailed_questions":
                                 detailed_questions = state_data.get("detailed_questions", [])
@@ -92,9 +103,10 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                                         question_text = current_question
                                     await message.answer(question_text)
                             elif state_name == "role_model":
+                                role_model = state_data.get("role_model")
                                 await message.answer(
                                     "Отлично! Теперь выбери свою ролевую модель:",
-                                    reply_markup=get_role_model_keyboard()
+                                    reply_markup=get_role_model_keyboard(selected_role=role_model)
                                 )
                             elif state_name == "goal_3months":
                                 await message.answer(
