@@ -45,28 +45,53 @@ def get_gender_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def get_values_keyboard() -> InlineKeyboardMarkup:
+def get_values_keyboard(selected_values: list[str] = None) -> InlineKeyboardMarkup:
     """Создает клавиатуру для выбора 3 основных ценностей.
+    
+    Args:
+        selected_values: Список выбранных ценностей (например, ["Честность", "Спокойствие"])
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с ценностями:
             - Честность, Спокойствие, Дружба, семья
             - Деньги, Власть, Забота о других, Созидание
     """
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Честность", callback_data="value_honesty")],
-        [InlineKeyboardButton(text="Спокойствие", callback_data="value_peace")],
-        [InlineKeyboardButton(text="Дружба, семья", callback_data="value_family")],
-        [InlineKeyboardButton(text="Деньги", callback_data="value_money")],
-        [InlineKeyboardButton(text="Власть", callback_data="value_power")],
-        [InlineKeyboardButton(text="Забота о других", callback_data="value_care")],
-        [InlineKeyboardButton(text="Созидание", callback_data="value_creation")],
-        [InlineKeyboardButton(text="✅ Готово (выбрано 3)", callback_data="values_done")]
-    ])
+    if selected_values is None:
+        selected_values = []
+    
+    # Маппинг значений на callback_data и текст
+    value_buttons = [
+        ("Честность", "value_honesty"),
+        ("Спокойствие", "value_peace"),
+        ("Дружба, семья", "value_family"),
+        ("Деньги", "value_money"),
+        ("Власть", "value_power"),
+        ("Забота о других", "value_care"),
+        ("Созидание", "value_creation"),
+    ]
+    
+    # Создаем кнопки с галочками для выбранных значений
+    keyboard = []
+    for value_text, callback_data in value_buttons:
+        if value_text in selected_values:
+            button_text = f"✅ {value_text}"
+        else:
+            button_text = value_text
+        keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+    
+    # Кнопка "Готово" с количеством выбранных
+    count = len(selected_values)
+    done_text = f"✅ Готово (выбрано {count})"
+    keyboard.append([InlineKeyboardButton(text=done_text, callback_data="values_done")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def get_development_spheres_keyboard() -> InlineKeyboardMarkup:
+def get_development_spheres_keyboard(selected_spheres: list[str] = None) -> InlineKeyboardMarkup:
     """Создает клавиатуру для выбора сфер развития (можно выбрать несколько).
+    
+    Args:
+        selected_spheres: Список выбранных сфер (например, ["Заработок", "Отношения"])
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с сферами:
@@ -74,14 +99,31 @@ def get_development_spheres_keyboard() -> InlineKeyboardMarkup:
             - Разум, Коммуникации
             - ✅ Готово
     """
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Заработок", callback_data="sphere_earnings")],
-        [InlineKeyboardButton(text="Отношения", callback_data="sphere_relationships")],
-        [InlineKeyboardButton(text="Здоровье/Тело", callback_data="sphere_health")],
-        [InlineKeyboardButton(text="Разум", callback_data="sphere_mind")],
-        [InlineKeyboardButton(text="Коммуникации", callback_data="sphere_communication")],
-        [InlineKeyboardButton(text="✅ Готово", callback_data="spheres_done")]
-    ])
+    if selected_spheres is None:
+        selected_spheres = []
+    
+    # Маппинг сфер на callback_data и текст
+    sphere_buttons = [
+        ("Заработок", "sphere_earnings"),
+        ("Отношения", "sphere_relationships"),
+        ("Здоровье/Тело", "sphere_health"),
+        ("Разум", "sphere_mind"),
+        ("Коммуникации", "sphere_communication"),
+    ]
+    
+    # Создаем кнопки с галочками для выбранных сфер
+    keyboard = []
+    for sphere_text, callback_data in sphere_buttons:
+        if sphere_text in selected_spheres:
+            button_text = f"✅ {sphere_text}"
+        else:
+            button_text = sphere_text
+        keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+    
+    # Кнопка "Готово"
+    keyboard.append([InlineKeyboardButton(text="✅ Готово", callback_data="spheres_done")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def get_role_model_keyboard() -> InlineKeyboardMarkup:
@@ -104,17 +146,27 @@ def get_role_model_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def get_payment_keyboard() -> InlineKeyboardMarkup:
+def get_payment_keyboard(has_premium: bool = False) -> InlineKeyboardMarkup:
     """Создает клавиатуру для оплаты premium доступа.
     
+    Args:
+        has_premium (bool): Если True, показывает кнопку отключения подписки
+    
     Returns:
-        InlineKeyboardMarkup: Клавиатура с кнопкой оплаты.
+        InlineKeyboardMarkup: Клавиатура с кнопкой оплаты или отключения подписки.
     """
     from app.config import settings
     price_rub = settings.PREMIUM_PRICE // 100
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"💳 Оплатить {price_rub} руб.", callback_data="payment_start")]
-    ])
+    
+    if has_premium:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отключить подписку", callback_data="subscription_cancel")]
+        ])
+    else:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"💳 Оплатить {price_rub} руб.", callback_data="payment_start")],
+            [InlineKeyboardButton(text="🎟️ Ввести промокод", callback_data="promo_code_enter")]
+        ])
 
 
 def get_share_referral_keyboard(referral_link: str) -> InlineKeyboardMarkup:
@@ -144,6 +196,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardMarkup: Inline клавиатура главного меню с кнопками:
             - "Свободная консультация"
             - "Задания"
+            - "Персонализация"
             - "Помощь"
             - "Оплата"
             - "Реферальная программа"
@@ -151,6 +204,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Свободная консультация", callback_data="menu_consultation")],
         [InlineKeyboardButton(text="Задания", callback_data="menu_tasks")],
+        [InlineKeyboardButton(text="Персонализация", callback_data="menu_personalization")],
         [InlineKeyboardButton(text="Помощь", callback_data="menu_help")],
         [InlineKeyboardButton(text="Оплата", callback_data="menu_payment")],
         [InlineKeyboardButton(text="Реферальная программа", callback_data="menu_referral")]
@@ -186,6 +240,22 @@ def get_restart_confirmation_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="✅ Да, рестарт", callback_data="restart_confirm"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="restart_cancel")
+        ]
+    ])
+
+
+def get_subscription_cancel_confirmation_keyboard() -> InlineKeyboardMarkup:
+    """Создает клавиатуру для подтверждения отключения подписки.
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками подтверждения:
+            - "✅ Да, отключить" - подтверждение отключения
+            - "❌ Отмена" - отмена отключения
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, отключить", callback_data="subscription_cancel_confirm"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="subscription_cancel_cancel")
         ]
     ])
 

@@ -85,6 +85,11 @@ class Settings:
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     """Окружение приложения: development или production."""
+    
+    # Yandex SpeechKit
+    YANDEX_SPEECHKIT_API_KEY: str = os.getenv("YANDEX_SPEECHKIT_API_KEY", "")
+    """API ключ для Yandex SpeechKit (идентификатор ключа)."""
+    
 
 
 # Глобальный экземпляр настроек

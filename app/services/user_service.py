@@ -214,6 +214,38 @@ async def activate_premium(session: AsyncSession, user_id: int, months: int = 1)
     return result.scalar_one()
 
 
+async def deactivate_premium(session: AsyncSession, user_id: int) -> User:
+    """Деактивирует premium доступ пользователя (мгновенный снос подписки).
+    
+    Сбрасывает флаг is_premium и дату окончания premium_expires_at.
+    
+    Args:
+        session (AsyncSession): Асинхронная сессия БД
+        user_id (int): Telegram ID пользователя
+        
+    Returns:
+        User: Обновленный объект пользователя
+    """
+    result = await session.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise ValueError(f"User {user_id} not found")
+    
+    await session.execute(
+        update(User)
+        .where(User.user_id == user_id)
+        .values(
+            is_premium=False,
+            premium_expires_at=None
+        )
+    )
+    await session.commit()
+    
+    result = await session.execute(select(User).where(User.user_id == user_id))
+    return result.scalar_one()
+
+
 async def reset_user_data(session: AsyncSession, user_id: int) -> User:
     """Сбрасывает данные пользователя, кроме is_premium.
     

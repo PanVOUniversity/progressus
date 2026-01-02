@@ -55,8 +55,7 @@ async def show_main_menu(message: Message, state: FSMContext = None, user: User 
     menu_text += "📈 Progressus - твой лучший персональный наставник.\n\n"
     menu_text += "✨ Топовые ролевые модели\n"
     menu_text += "📝 Персональные задания\n\n"
-    menu_text += "💰 Приглашайте друзей и получайте 30% с каждого!\n"
-    menu_text += "🎁 Приглашенные получат 3 дня доступа бесплатно!"
+    menu_text += "🎁 За 3 оплативших реферала - месяц Premium в подарок!"
     
     # Отправляем сообщение с inline кнопками меню под текстом
     await message.answer(
@@ -116,15 +115,45 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
             )
             break
         
+        # Проверяем доступность консультации
+        from app.services.user_service import is_premium_active
+        premium_active = await is_premium_active(session, user_id)
+        
+        # Если нет премиума и консультация уже использована
+        if not premium_active and user.consultation_used:
+            await callback.answer("Бесплатная консультация доступна только один раз", show_alert=True)
+            await message.edit_text(
+                "💬 Свободная консультация\n\n"
+                "❌ Ты уже использовал бесплатную консультацию.\n\n"
+                "Для неограниченных консультаций активируй Premium доступ через меню 'Оплата'.",
+                reply_markup=None
+            )
+            await message.answer(
+                "",
+                reply_markup=get_main_keyboard()
+            )
+            break
+        
         # Устанавливаем состояние консультации
         await state.set_state(SurveyStates.consultation)
         await callback.answer()
-        await message.edit_text(
-            "💬 Свободная консультация\n\n"
-            "Задай мне любой вопрос, и я помогу тебе разобраться в стиле твоего наставника.\n\n"
-            "Напиши свой вопрос:",
-            reply_markup=None
-        )
+        
+        # Показываем предупреждение, если это первая и последняя бесплатная консультация
+        if not premium_active and not user.consultation_used:
+            await message.edit_text(
+                "💬 Свободная консультация\n\n"
+                "⚠️ Бесплатная консультация доступна только один раз.\n\n"
+                "Задай мне любой вопрос, и я помогу тебе разобраться в стиле твоего наставника.\n\n"
+                "Напиши свой вопрос:",
+                reply_markup=None
+            )
+        else:
+            await message.edit_text(
+                "💬 Свободная консультация\n\n"
+                "Задай мне любой вопрос, и я помогу тебе разобраться в стиле твоего наставника.\n\n"
+                "Напиши свой вопрос:",
+                reply_markup=None
+            )
         await message.answer(
             reply_markup=get_main_keyboard()
         )
@@ -183,7 +212,9 @@ async def process_consultation(message: Message, state: FSMContext):
 Ответь на этот вопрос в своем стиле. Будь полезным, мотивирующим и конкретным.
 Если вопрос не по теме развития или неясен, вежливо уточни или перенаправь разговор.
 
-Отвечай кратко, по делу, в своем стиле. Не используй звездочки или markdown форматирование."""
+Отвечай кратко, по делу, в своем стиле. Не используй звездочки или markdown форматирование.
+
+ВАЖНО: Не форматируй текст *. Пиши обычным текстом без звездочек и форматирования."""
             
             response = await client.chat.completions.create(
                 model=settings.OPENROUTER_MODEL,
@@ -199,6 +230,20 @@ async def process_consultation(message: Message, state: FSMContext):
             answer = clean_markdown(answer)
             
             await message.answer(answer, reply_markup=get_main_keyboard())
+            
+            # Отмечаем, что консультация использована (только если нет премиума и еще не использована)
+            from app.services.user_service import is_premium_active
+            premium_active = await is_premium_active(session, user_id)
+            if not premium_active and not user.consultation_used:
+                from sqlalchemy import update
+                await session.execute(
+                    update(User)
+                    .where(User.user_id == user_id)
+                    .values(consultation_used=True)
+                )
+                await session.commit()
+                # Обновляем объект user для следующей проверки
+                await session.refresh(user)
             
         except Exception as e:
             import logging
@@ -348,7 +393,7 @@ async def cmd_payment(callback: CallbackQuery, state: FSMContext):
             await message.edit_text(
                 "💎 У тебя уже есть Premium доступ!\n\n"
                 "Ты можешь пользоваться всеми функциями бота.",
-                reply_markup=None
+                reply_markup=get_payment_keyboard(has_premium=True)
             )
         else:
             await message.edit_text(
@@ -359,7 +404,7 @@ async def cmd_payment(callback: CallbackQuery, state: FSMContext):
                 f"✅ Обратная связь по отчетам\n"
                 f"✅ Трекинг прогресса\n\n"
                 f"Стоимость: {price_rub} руб./месяц",
-                reply_markup=get_payment_keyboard()
+                reply_markup=get_payment_keyboard(has_premium=False)
             )
         await message.answer(
             reply_markup=get_main_keyboard()
@@ -409,10 +454,9 @@ async def cmd_referral_program(callback: CallbackQuery, state: FSMContext):
         
         referral_text = (
             f"💰 Реферальная программа\n\n"
-            f"Приглашай друзей и получай 30% с каждого платежа!\n\n"
             f"Твоя реферальная ссылка:\n`{referral_link}`\n\n"
             f"{stats_text}\n"
-            f"🎁 Приглашенные получат 3 дня Premium доступа бесплатно!"
+            f"🎁 За {stats['referrals_for_premium']} оплативших реферала - месяц Premium в подарок!"
         )
         
         await callback.answer()

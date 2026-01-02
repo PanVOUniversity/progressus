@@ -13,7 +13,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import BotCommand, BotCommandScopeDefault, MenuButtonCommands
 from aiogram.fsm.storage.redis import RedisStorage
 from app.config import settings
-from app.handlers import start, privacy, survey, payments, reports, referral, restart, menu
+from app.handlers import start, privacy, survey, payments, reports, referral, restart, menu, voice, personalization
 from app.database import engine, Base
 
 # Настройка логирования
@@ -55,6 +55,8 @@ dp.include_router(referral.router)
 dp.include_router(privacy.router)
 dp.include_router(survey.router)
 dp.include_router(payments.router)
+dp.include_router(voice.router)  # Обработчик голосовых сообщений
+dp.include_router(personalization.router)  # Обработчик персонализации
 dp.include_router(reports.router)
 
 
@@ -68,10 +70,8 @@ async def setup_bot_commands(bot: Bot):
         bot (Bot): Экземпляр Telegram бота
     """
     commands = [
-        BotCommand(command="start", description="🚀 Начать работу с ботом"),
-        BotCommand(command="ref", description="🔗 Получить реферальную ссылку"),
-        BotCommand(command="continue", description="💬 Продолжить переписку"),
-        BotCommand(command="restart", description="🔄 Рестарт бота (сброс данных)"),
+        BotCommand(command="restart", description="� Рестарт бота (сброс данных) кроме "),
+        BotCommand(command="menu", description="Главное меню"),
     ]
     
     # Устанавливаем команды бота

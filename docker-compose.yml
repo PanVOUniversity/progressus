@@ -46,6 +46,7 @@ services:
       WEBHOOK_URL: ${WEBHOOK_URL}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      YANDEX_SPEECHKIT_API_KEY: ${YANDEX_SPEECHKIT_API_KEY}
     volumes:
       - ./logs:/app/logs
     ports:

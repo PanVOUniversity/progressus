@@ -114,6 +114,14 @@ class User(Base):
     survey_state = Column(JSON, nullable=True)
     """JSON с текущим состоянием опроса и данными FSM для восстановления после перезапуска."""
     
+    # Использование консультации
+    consultation_used = Column(Boolean, default=False, nullable=False)
+    """Флаг использования бесплатной консультации (доступна только один раз без премиума)."""
+    
+    # Персонализация - глубокие вопросы для лучшего понимания пользователя
+    personalization_data = Column(JSON, nullable=True)
+    """JSON с данными персонализации: вопросы и ответы для глубокого понимания пользователя."""
+    
     # Временные метки
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     """Дата создания записи."""

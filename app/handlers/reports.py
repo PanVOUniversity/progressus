@@ -68,11 +68,19 @@ async def process_report(message: Message, state: FSMContext):
             await message.answer("Сначала пройди опрос через /start")
             break
         
-        # Проверяем активность премиума
-        from app.services.user_service import is_premium_active
-        if not await is_premium_active(session, user_id):
-            await message.answer("Для отправки отчетов нужен Premium доступ. Активируй его через /start")
-            break
+        # Проверяем, это ли первый отчет (уровень 0 и нет отчетов в БД)
+        from sqlalchemy import func
+        reports_count = await session.execute(
+            select(func.count(Report.id)).where(Report.user_id == user_id)
+        )
+        is_first_report = reports_count.scalar() == 0 and user.level == 0
+        
+        # Для первого отчета не требуем премиум, для остальных - требуем
+        if not is_first_report:
+            from app.services.user_service import is_premium_active
+            if not await is_premium_active(session, user_id):
+                await message.answer("Для отправки отчетов нужен Premium доступ. Активируй его через /start")
+                break
         
         if not user.current_homework:
             import logging
@@ -167,6 +175,22 @@ async def process_report(message: Message, state: FSMContext):
                     f"{clean_markdown(clean_feedback)}{level_up_text}\n\n"
                     f"Новый уровень: {new_level}\nНовое домашнее задание:\n{clean_markdown(clean_homework)}"
                 )
+                
+                # Если это был первый отчет, запрашиваем оплату после проверки
+                if is_first_report:
+                    from app.keyboards import get_payment_keyboard
+                    from app.config import settings
+                    price_rub = settings.PREMIUM_PRICE // 100
+                    await message.answer(
+                        f"💎 Для продолжения работы нужен Premium доступ\n\n"
+                        f"Premium включает:\n"
+                        f"✅ Персональный роадмап достижения цели\n"
+                        f"✅ Ежедневные задания от ИИ-коуча\n"
+                        f"✅ Обратная связь по отчетам\n"
+                        f"✅ Трекинг прогресса\n\n"
+                        f"Стоимость: {price_rub} руб./месяц",
+                        reply_markup=get_payment_keyboard()
+                    )
             else:
                 # ДЗ требует правок - оставляем то же ДЗ с правками
                 await update_user_homework(session, user_id, homework_or_revision)
@@ -213,6 +237,22 @@ async def process_report(message: Message, state: FSMContext):
                     f"📝 Правки к ДЗ:\n{clean_markdown(clean_homework)}\n\n"
                     f"Переделай задание с учетом этих правок и отправь новый отчет."
                 )
+                
+                # Если это был первый отчет, запрашиваем оплату после проверки
+                if is_first_report:
+                    from app.keyboards import get_payment_keyboard
+                    from app.config import settings
+                    price_rub = settings.PREMIUM_PRICE // 100
+                    await message.answer(
+                        f"💎 Для продолжения работы нужен Premium доступ\n\n"
+                        f"Premium включает:\n"
+                        f"✅ Персональный роадмап достижения цели\n"
+                        f"✅ Ежедневные задания от ИИ-коуча\n"
+                        f"✅ Обратная связь по отчетам\n"
+                        f"✅ Трекинг прогресса\n\n"
+                        f"Стоимость: {price_rub} руб./месяц",
+                        reply_markup=get_payment_keyboard()
+                    )
             
             await session.commit()
             

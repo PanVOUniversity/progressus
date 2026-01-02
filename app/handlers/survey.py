@@ -342,11 +342,21 @@ async def process_value_selection(callback: CallbackQuery, state: FSMContext):
         else:
             if len(selected_values[user_id]) < 3:
                 selected_values[user_id].append(value)
+            else:
+                await callback.answer("Можно выбрать максимум 3 ценности", show_alert=True)
+                return
     
-    # Обновляем клавиатуру с количеством выбранных
+    # Обновляем клавиатуру с галочками на выбранных кнопках
     count = len(selected_values[user_id])
-    keyboard = get_values_keyboard()
-    # Обновляем текст кнопки "Готово"
+    keyboard = get_values_keyboard(selected_values=selected_values[user_id])
+    
+    # Обновляем сообщение с новой клавиатурой
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+    
+    # Показываем уведомление
     if count == 3:
         await callback.answer(f"Выбрано 3 ценности. Нажми '✅ Готово'", show_alert=False)
     else:
@@ -416,7 +426,16 @@ async def process_sphere_selection(callback: CallbackQuery, state: FSMContext):
         else:
             selected_spheres[user_id].append(sphere)
     
+    # Обновляем клавиатуру с галочками на выбранных кнопках
     count = len(selected_spheres[user_id])
+    keyboard = get_development_spheres_keyboard(selected_spheres=selected_spheres[user_id])
+    
+    # Обновляем сообщение с новой клавиатурой
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+    
     await callback.answer(f"Выбрано: {count}", show_alert=False)
 
 
@@ -638,36 +657,10 @@ async def process_goal_3months(message: Message, state: FSMContext):
             logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
         break
     
-    # Проверяем premium статус перед генерацией роадмапа
+    # Генерируем роадмап (без проверки премиума - оплата будет запрошена после первого ДЗ)
     import logging
     logger = logging.getLogger(__name__)
-    
-    async for session in get_db():
-        premium_active = await is_premium_active(session, message.from_user.id)
-        logger.info(f"Проверка премиума для пользователя {message.from_user.id}: {premium_active}")
-        break
-    
-    if not premium_active:
-        # Показываем предложение оплаты
-        logger.info(f"Пользователь {message.from_user.id} не имеет премиума, показываем предложение оплаты")
-        from app.config import settings
-        price_rub = settings.PREMIUM_PRICE // 100
-        await message.answer(
-            f"💎 Для получения персонального роадмапа нужен Premium доступ\n\n"
-            f"Premium включает:\n"
-            f"✅ Персональный роадмап достижения цели\n"
-            f"✅ Ежедневные задания от ИИ-коуча\n"
-            f"✅ Обратная связь по отчетам\n"
-            f"✅ Трекинг прогресса\n\n"
-            f"Стоимость: {price_rub} руб./месяц",
-            reply_markup=get_payment_keyboard()
-        )
-        # Сохраняем флаг, что нужно продолжить генерацию роадмапа после оплаты
-        await state.update_data(pending_roadmap=True)
-        return
-    
-    # Генерируем роадмап (только если есть премиум)
-    logger.info(f"Пользователь {message.from_user.id} имеет премиум, начинаем генерацию роадмапа")
+    logger.info(f"Начинаем генерацию роадмапа для пользователя {message.from_user.id}")
     await message.answer("🗺️ Генерирую твой персональный роадмап достижения цели...")
     
     data = await state.get_data()
@@ -822,11 +815,11 @@ async def process_goal_3months(message: Message, state: FSMContext):
                 )
         except Exception as hw_error:
             logger.error(f"Ошибка при генерации первого ДЗ: {hw_error}", exc_info=True)
-        await state.set_state(SurveyStates.finish)
-        await message.answer(
-            "Произошла ошибка при генерации задания. Попробуй написать /start еще раз.",
-            reply_markup=get_main_keyboard()
-        )
+            await state.set_state(SurveyStates.finish)
+            await message.answer(
+                "Произошла ошибка при генерации задания. Попробуй написать /start еще раз.",
+                reply_markup=get_main_keyboard()
+            )
         
     except Exception as e:
         # Только ошибки генерации роадмапа попадают сюда

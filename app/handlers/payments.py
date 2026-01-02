@@ -1,77 +1,287 @@
-"""Handlers для обработки платежей (Telegram Payments с заглушкой).
+"""Handlers для обработки платежей через Telegram Payments.
 
-Модуль обрабатывает оплату premium доступа. В текущей версии используется
-заглушка - premium активируется автоматически без реального платежа.
-Реальный код обработки платежей закомментирован и может быть активирован
-после настройки PROVIDER_TOKEN в BotFather.
+Модуль обрабатывает оплату premium доступа через Telegram Payments API.
 """
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, PreCheckoutQuery, SuccessfulPayment, Message
+from aiogram.types import CallbackQuery, PreCheckoutQuery, Message, LabeledPrice
+import logging
 from aiogram.fsm.context import FSMContext
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Payment, User
-from app.services.user_service import activate_premium
+from app.services.user_service import activate_premium, deactivate_premium
 from app.services.referral_service import add_referral_on_payment
 from app.database import get_db
+from app.states import SurveyStates
+from app.keyboards import get_payment_keyboard, get_main_keyboard
 from datetime import datetime
 
 router = Router()
 """Роутер для обработки платежей."""
 
+logger = logging.getLogger(__name__)
+
 
 @router.callback_query(F.data == "payment_start")
 async def start_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    """Обработка начала процесса оплаты (заглушка).
+    """Обработка начала процесса оплаты.
     
-    В текущей версии сразу активирует premium доступ без реального платежа:
-    создает запись о платеже со статусом "completed", активирует premium,
-    повышает уровень пользователя до 1 и обрабатывает реферальную систему.
+    Отправляет инвойс для оплаты premium доступа через Telegram Payments.
     
     Args:
         callback (CallbackQuery): Callback запрос от нажатия кнопки оплаты
         bot (Bot): Экземпляр бота для отправки сообщений
-        
-    Note:
-        Это заглушка для тестирования. Для реальных платежей нужно раскомментировать
-        код обработки pre_checkout_query и successful_payment.
+        state (FSMContext): Контекст FSM для сохранения состояния
     """
-    # ЗАГЛУШКА: вместо реальной оплаты сразу активируем premium
+    user_id = callback.from_user.id
+    
+    # Проверяем наличие PROVIDER_TOKEN
+    if not settings.PROVIDER_TOKEN:
+        logger.error("PROVIDER_TOKEN не настроен в конфигурации")
+        await callback.answer("Ошибка: платежи не настроены. Обратитесь к администратору.", show_alert=True)
+        return
+    
+    price_rub = settings.PREMIUM_PRICE // 100
+    
+    # Сохраняем состояние для обработки после оплаты
+    data = await state.get_data()
+    pending_roadmap = data.get("pending_roadmap", False)
+    await state.update_data(pending_roadmap=pending_roadmap)
+    
+    try:
+        invoice_params = {
+            "chat_id": callback.message.chat.id,
+            "title": "💎 Premium доступ",
+            "description": (
+                "Premium включает:\n"
+                "✅ Персональный роадмап достижения цели\n"
+                "✅ Ежедневные задания от ИИ-коуча\n"
+                "✅ Обратная связь по отчетам\n"
+                "✅ Трекинг прогресса"
+            ),
+            "payload": f"premium_{user_id}_{int(datetime.utcnow().timestamp())}",
+            "provider_token": settings.PROVIDER_TOKEN,
+            "currency": "RUB",
+            "prices": [LabeledPrice(label="Premium доступ (1 месяц)", amount=settings.PREMIUM_PRICE)],
+            "start_parameter": f"premium-{user_id}",
+            "photo_url": None,
+            "need_name": False,
+            "need_phone_number": False,
+            "need_email": False,
+            "need_shipping_address": False,
+            "send_phone_number_to_provider": False,
+            "send_email_to_provider": False,
+            "is_flexible": False
+        }
+        
+        # Логируем параметры (без provider_token для безопасности)
+        logger.info(f"Отправка инвойса для пользователя {user_id}. Параметры: { {k: v for k, v in invoice_params.items() if k != 'provider_token'} }")
+        
+        await bot.send_invoice(**invoice_params)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Ошибка при отправке инвойса для пользователя {user_id}: {e}", exc_info=True)
+        await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "subscription_cancel")
+async def cancel_subscription(callback: CallbackQuery, bot: Bot):
+    """Обработка нажатия кнопки отключения подписки - показывает подтверждение.
+    
+    Показывает предупреждение и запрашивает подтверждение перед отключением подписки.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки отключения
+        bot (Bot): Экземпляр бота для отправки сообщений
+    """
+    from app.keyboards import get_subscription_cancel_confirmation_keyboard
+    
+    await callback.answer()
+    await callback.message.edit_text(
+        "⚠️ Ты уверен, что хочешь отключить подписку?\n\n"
+        "Подписка будет остановлена, и ты потеряешь доступ к:\n"
+        "❌ Персональному роадмапу\n"
+        "❌ Ежедневным заданиям\n"
+        "❌ Обратной связи по отчетам\n"
+        "❌ Трекингу прогресса\n\n"
+        "Для продолжения работы нужно будет активировать подписку снова.",
+        reply_markup=get_subscription_cancel_confirmation_keyboard()
+    )
+
+
+@router.callback_query(F.data == "subscription_cancel_confirm")
+async def confirm_subscription_cancel(callback: CallbackQuery, bot: Bot):
+    """Обработка подтверждения отключения подписки (мгновенный снос).
+    
+    Деактивирует premium доступ пользователя немедленно после подтверждения.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки подтверждения
+        bot (Bot): Экземпляр бота для отправки сообщений
+    """
     user_id = callback.from_user.id
     
     async for session in get_db():
-        # Создаем запись о платеже (заглушка)
-        payment = Payment(
-            user_id=user_id,
-            payment_id=f"stub_{user_id}_{int(datetime.utcnow().timestamp())}",
-            amount=settings.PREMIUM_PRICE,
-            status="completed"
-        )
-        session.add(payment)
-        
-        # Активируем premium на 1 месяц
-        await activate_premium(session, user_id, months=1)
-        
-        # Повышаем уровень до 1 при первой оплате
-        from sqlalchemy import select
-        result = await session.execute(select(User).where(User.user_id == user_id))
-        user = result.scalar_one()
-        if user.level == 0:
-            from sqlalchemy import update
-            await session.execute(
-                update(User)
-                .where(User.user_id == user_id)
-                .values(level=1)
+        try:
+            # Деактивируем premium
+            await deactivate_premium(session, user_id)
+            
+            await callback.message.edit_text(
+                "❌ Подписка отключена\n\n"
+                "Premium доступ деактивирован. Для продолжения работы активируй подписку снова."
             )
-        
-        # Обрабатываем рефералку
-        referrer_id = await add_referral_on_payment(session, user_id)
-        if referrer_id:
-            # Даем месяц бесплатного премиума рефереру
-            await activate_premium(session, referrer_id, months=1)
-        
-        await session.commit()
+            await callback.answer("Подписка отключена")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка при отключении подписки для пользователя {user_id}: {e}", exc_info=True)
+            await callback.message.edit_text(
+                "Произошла ошибка при отключении подписки. Попробуй позже."
+            )
+            await callback.answer("Ошибка", show_alert=True)
         break
+
+
+@router.callback_query(F.data == "subscription_cancel_cancel")
+async def cancel_subscription_cancel(callback: CallbackQuery, bot: Bot):
+    """Обработка отмены отключения подписки.
+    
+    Возвращает пользователя к экрану оплаты без изменений.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки отмены
+        bot (Bot): Экземпляр бота для отправки сообщений
+    """
+    from app.keyboards import get_payment_keyboard
+    from app.config import settings
+    from app.services.user_service import is_premium_active
+    from app.database import get_db
+    
+    user_id = callback.from_user.id
+    price_rub = settings.PREMIUM_PRICE // 100
+    
+    async for session in get_db():
+        premium_active = await is_premium_active(session, user_id)
+        
+        await callback.answer("Отменено")
+        
+        if premium_active:
+            await callback.message.edit_text(
+                "💎 У тебя уже есть Premium доступ!\n\n"
+                "Ты можешь пользоваться всеми функциями бота.",
+                reply_markup=get_payment_keyboard(has_premium=True)
+            )
+        else:
+            await callback.message.edit_text(
+                f"💎 Premium доступ\n\n"
+                f"Premium включает:\n"
+                f"✅ Персональный роадмап достижения цели\n"
+                f"✅ Ежедневные задания от ИИ-коуча\n"
+                f"✅ Обратная связь по отчетам\n"
+                f"✅ Трекинг прогресса\n\n"
+                f"Стоимость: {price_rub} руб./месяц",
+                reply_markup=get_payment_keyboard(has_premium=False)
+            )
+        break
+
+
+@router.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery, bot: Bot):
+    """Валидация платежа перед подтверждением.
+    
+    Проверяет корректность платежа и автоматически одобряет его.
+    
+    Args:
+        pre_checkout_query (PreCheckoutQuery): Запрос на валидацию платежа
+        bot (Bot): Экземпляр бота
+    """
+    user_id = pre_checkout_query.from_user.id
+    
+    # Проверяем сумму платежа
+    if pre_checkout_query.total_amount != settings.PREMIUM_PRICE:
+        logger.warning(f"Неверная сумма платежа для пользователя {user_id}: {pre_checkout_query.total_amount} вместо {settings.PREMIUM_PRICE}")
+        await bot.answer_pre_checkout_query(
+            pre_checkout_query.id,
+            ok=False,
+            error_message="Неверная сумма платежа"
+        )
+        return
+    
+    # Проверяем валюту
+    if pre_checkout_query.currency != "RUB":
+        logger.warning(f"Неверная валюта платежа для пользователя {user_id}: {pre_checkout_query.currency}")
+        await bot.answer_pre_checkout_query(
+            pre_checkout_query.id,
+            ok=False,
+            error_message="Поддерживается только валюта RUB"
+        )
+        return
+    
+    # Одобряем платеж
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+    logger.info(f"Платеж одобрен для пользователя {user_id}")
+
+
+@router.message(F.successful_payment)
+async def successful_payment_handler(message: Message, bot: Bot, state: FSMContext):
+    """Обработка успешного платежа.
+    
+    Сохраняет платеж в БД, активирует premium доступ, повышает уровень
+    и обрабатывает реферальную систему.
+    
+    Args:
+        message (Message): Сообщение с успешным платежом
+        bot (Bot): Экземпляр бота
+        state (FSMContext): Контекст FSM для проверки состояния
+    """
+    user_id = message.from_user.id
+    payment = message.successful_payment
+    
+    logger.info(f"Обработка успешного платежа для пользователя {user_id}, сумма: {payment.total_amount}")
+    
+    async for session in get_db():
+        try:
+            # Сохраняем платеж в БД
+            db_payment = Payment(
+                user_id=user_id,
+                payment_id=payment.telegram_payment_charge_id,
+                amount=payment.total_amount,
+                status="completed"
+            )
+            session.add(db_payment)
+            
+            # Активируем premium на 1 месяц
+            await activate_premium(session, user_id, months=1)
+            
+            # Повышаем уровень до 1 при первой оплате
+            from sqlalchemy import select, update
+            result = await session.execute(select(User).where(User.user_id == user_id))
+            user = result.scalar_one_or_none()
+            
+            if user and user.level == 0:
+                await session.execute(
+                    update(User)
+                    .where(User.user_id == user_id)
+                    .values(level=1)
+                )
+            
+            # Обрабатываем рефералку
+            referrer_id = await add_referral_on_payment(session, user_id)
+            if referrer_id:
+                # Даем месяц бесплатного премиума рефереру
+                await activate_premium(session, referrer_id, months=1)
+                logger.info(f"Активирован premium для реферера {referrer_id} за оплату пользователя {user_id}")
+            
+            await session.commit()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке платежа для пользователя {user_id}: {e}", exc_info=True)
+            await session.rollback()
+            await message.answer(
+                "❌ Произошла ошибка при активации premium доступа.\n"
+                "Платеж прошел успешно, но активация не завершена.\n"
+                "Обратитесь к администратору."
+            )
+            break
     
     # Проверяем, нужно ли продолжить генерацию роадмапа
     data = await state.get_data()
@@ -80,63 +290,117 @@ async def start_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
     if pending_roadmap:
         # Убираем флаг и продолжаем генерацию роадмапа
         await state.update_data(pending_roadmap=False)
-        await callback.message.edit_text("✅ Premium доступ активирован!")
-        await callback.answer("Premium активирован, генерирую роадмап...")
+        await message.answer("✅ Premium доступ активирован! Генерирую роадмап...")
         
         # Импортируем функцию генерации роадмапа
         from app.handlers.survey import generate_roadmap_after_payment
-        await generate_roadmap_after_payment(callback.message, state, bot)
+        await generate_roadmap_after_payment(message, state, bot)
     else:
-        await callback.message.edit_text(
-            "✅ Premium доступ активирован!\n\n"
-            "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
+            await message.answer(
+                "✅ Premium доступ активирован!\n\n"
+                "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
+            )
+
+
+@router.callback_query(F.data == "promo_code_enter")
+async def enter_promo_code(callback: CallbackQuery, state: FSMContext):
+    """Обработка нажатия кнопки "Ввести промокод".
+    
+    Переводит пользователя в состояние ввода промокода.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки
+        state (FSMContext): Контекст FSM
+    """
+    await callback.answer()
+    await state.set_state(SurveyStates.promo_code)
+    
+    await callback.message.edit_text(
+        "🎟️ Введи промокод:\n\n"
+        "Напиши промокод для активации premium доступа.",
+        reply_markup=None
+    )
+
+
+@router.message(SurveyStates.promo_code)
+async def process_promo_code(message: Message, state: FSMContext):
+    """Обработка введенного промокода.
+    
+    Проверяет промокод и активирует premium доступ при успешной проверке.
+    
+    Args:
+        message (Message): Сообщение с промокодом
+        state (FSMContext): Контекст FSM
+    """
+    user_id = message.from_user.id
+    user_text = message.text.strip()
+    
+    # Проверяем команды выхода
+    if user_text.lower() in ["отмена", "меню", "/menu", "menu", "назад"]:
+        await state.clear()
+        from app.config import settings
+        from app.services.user_service import is_premium_active
+        
+        price_rub = settings.PREMIUM_PRICE // 100
+        
+        async for session in get_db():
+            premium_active = await is_premium_active(session, user_id)
+            
+            if premium_active:
+                await message.answer(
+                    "💎 У тебя уже есть Premium доступ!\n\n"
+                    "Ты можешь пользоваться всеми функциями бота.",
+                    reply_markup=get_payment_keyboard(has_premium=True)
+                )
+            else:
+                await message.answer(
+                    f"💎 Premium доступ\n\n"
+                    f"Premium включает:\n"
+                    f"✅ Персональный роадмап достижения цели\n"
+                    f"✅ Ежедневные задания от ИИ-коуча\n"
+                    f"✅ Обратная связь по отчетам\n"
+                    f"✅ Трекинг прогресса\n\n"
+                    f"Стоимость: {price_rub} руб./месяц",
+                    reply_markup=get_payment_keyboard(has_premium=False)
+                )
+            break
+        return
+    
+    promo_code = user_text.upper()
+    
+    # Проверяем промокод
+    if promo_code == "FREEADMIN":
+        async for session in get_db():
+            try:
+                # Активируем premium на длительный срок (например, 10 лет для админов)
+                await activate_premium(session, user_id, months=120)
+                
+                await session.commit()
+                
+                await message.answer(
+                    "✅ Промокод активирован!\n\n"
+                    "Premium доступ активирован на длительный срок.\n"
+                    "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report",
+                    reply_markup=get_main_keyboard()
+                )
+                
+                logger.info(f"Промокод FREEADMIN активирован для пользователя {user_id}")
+                
+            except Exception as e:
+                logger.error(f"Ошибка при активации промокода для пользователя {user_id}: {e}", exc_info=True)
+                await message.answer(
+                    "❌ Произошла ошибка при активации промокода. Попробуй позже.",
+                    reply_markup=get_main_keyboard()
+                )
+            break
+        
+        await state.clear()
+    else:
+        # Неверный промокод
+        await message.answer(
+            "❌ Неверный промокод.\n\n"
+            "Проверь правильность ввода и попробуй еще раз.\n"
+            "Для отмены напиши 'Отмена' или 'Назад'.",
+            reply_markup=get_main_keyboard()
         )
-        await callback.answer()
-
-
-# ЗАГЛУШКА: Закомментирован реальный код обработки платежей
-# Раскомментируй когда будешь готов к реальным платежам
-
-# @router.pre_checkout_query()
-# async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery, bot: Bot):
-#     """Валидация платежа перед подтверждением."""
-#     # ЗАГЛУШКА: автоматически одобряем все платежи
-#     await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-# 
-# 
-# @router.message(F.successful_payment)
-# async def successful_payment_handler(message: Message, bot: Bot):
-#     """Обработка успешного платежа."""
-#     user_id = message.from_user.id
-#     payment = message.successful_payment
-#     
-#     async for session in get_db():
-#         # Сохраняем платеж
-#         db_payment = Payment(
-#             user_id=user_id,
-#             payment_id=payment.telegram_payment_charge_id,
-#             amount=payment.total_amount,
-#             status="completed"
-#         )
-#         session.add(db_payment)
-#         
-#         # Активируем premium и повышаем уровень до 1
-#         await session.execute(
-#             User.__table__.update()
-#             .where(User.user_id == user_id)
-#             .values(is_premium=True, level=1)
-#         )
-#         
-#         # Обрабатываем рефералку
-#         referrer_id = await add_referral_on_payment(session, user_id)
-#         if referrer_id:
-#             await update_user_level(session, referrer_id, 2)
-#         
-#         await session.commit()
-#         break
-#     
-#     await message.answer(
-#         "✅ Premium доступ активирован!\n\n"
-#         "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
-#     )
 
