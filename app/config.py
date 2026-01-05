@@ -64,6 +64,16 @@ class Settings:
     PREMIUM_PRICE: int = int(os.getenv("PREMIUM_PRICE", "29900"))  # В копейках
     """Цена premium доступа в копейках (по умолчанию 299 руб = 29900 копеек)."""
     
+    # YooKassa
+    YOOKASSA_SHOP_ID: str = os.getenv("YOOKASSA_SHOP_ID", "")
+    """Shop ID для YooKassa API."""
+    
+    YOOKASSA_SECRET_KEY: str = os.getenv("YOOKASSA_SECRET_KEY", "")
+    """Secret Key для YooKassa API."""
+    
+    YOOKASSA_WEBHOOK_URL: Optional[str] = os.getenv("YOOKASSA_WEBHOOK_URL")
+    """URL для webhook от YooKassa (если None, будет использован WEBHOOK_URL/yookassa)."""
+    
     # Referral System
     REFERRALS_FOR_PREMIUM: int = int(os.getenv("REFERRALS_FOR_PREMIUM", "3"))
     """Количество рефералов, необходимое для получения месяца бесплатного премиума."""

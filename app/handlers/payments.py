@@ -3,13 +3,14 @@
 Модуль обрабатывает оплату premium доступа через Telegram Payments API.
 """
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, PreCheckoutQuery, Message, LabeledPrice
+from aiogram.types import CallbackQuery, PreCheckoutQuery, Message, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 from aiogram.fsm.context import FSMContext
 from app.config import settings
 from app.models import Payment, User
 from app.services.user_service import activate_premium, deactivate_premium
 from app.services.referral_service import add_referral_on_payment
+from app.services.yookassa_service import create_sbp_payment
 from app.database import get_db
 from app.states import SurveyStates
 from app.keyboards import get_payment_keyboard, get_main_keyboard
@@ -81,6 +82,120 @@ async def start_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка при отправке инвойса для пользователя {user_id}: {e}", exc_info=True)
         await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "payment_sbp_start")
+async def start_sbp_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Обработка начала процесса оплаты через СБП (YooKassa).
+    
+    Создает платеж через YooKassa API с методом оплаты СБП и отправляет
+    пользователю ссылку для оплаты.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки оплаты СБП
+        bot (Bot): Экземпляр бота для отправки сообщений
+        state (FSMContext): Контекст FSM для сохранения состояния
+    """
+    user_id = callback.from_user.id
+    
+    # Проверяем наличие YooKassa credentials
+    if not settings.YOOKASSA_SHOP_ID or not settings.YOOKASSA_SECRET_KEY:
+        logger.error("YooKassa credentials не настроены в конфигурации")
+        await callback.answer("Ошибка: платежи через СБП не настроены. Обратитесь к администратору.", show_alert=True)
+        return
+    
+    # Сохраняем состояние для обработки после оплаты
+    data = await state.get_data()
+    pending_roadmap = data.get("pending_roadmap", False)
+    await state.update_data(pending_roadmap=pending_roadmap)
+    
+    try:
+        # Сохраняем message_id и chat_id для последующего удаления сообщения
+        message_id = callback.message.message_id
+        chat_id = callback.message.chat.id
+        
+        # Создаем платеж через YooKassa с message_id в metadata
+        payment_data = await create_sbp_payment(
+            amount=settings.PREMIUM_PRICE,
+            user_id=user_id,
+            description="Premium доступ - Персональный роадмап, ежедневные задания, обратная связь",
+            message_id=message_id,
+            chat_id=chat_id
+        )
+        
+        if not payment_data or not payment_data.get("confirmation_url"):
+            logger.error(f"Не удалось создать платеж YooKassa для пользователя {user_id}")
+            await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+            return
+        
+        # Сохраняем payment_id в состоянии для последующей обработки
+        await state.update_data(yookassa_payment_id=payment_data["id"])
+        
+        # Создаем клавиатуру с кнопкой для оплаты
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить через СБП", url=payment_data["confirmation_url"])],
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="payment_sbp_cancel")]
+        ])
+        
+        price_rub = settings.PREMIUM_PRICE // 100
+        await callback.message.edit_text(
+            f"💎 Оплата Premium доступа через СБП\n\n"
+            f"Сумма: {price_rub} руб.\n\n"
+            f"Нажми на кнопку ниже, чтобы перейти к оплате.\n"
+            f"После успешной оплаты premium доступ будет активирован автоматически.",
+            reply_markup=keyboard
+        )
+        await callback.answer()
+        
+        logger.info(f"Создан платеж YooKassa {payment_data['id']} для пользователя {user_id}, message_id={message_id}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка при создании платежа YooKassa для пользователя {user_id}: {e}", exc_info=True)
+        await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "payment_sbp_cancel")
+async def cancel_sbp_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Обработка отмены платежа через СБП.
+    
+    Возвращает пользователя к экрану выбора способа оплаты.
+    
+    Args:
+        callback (CallbackQuery): Callback запрос от нажатия кнопки отмены
+        bot (Bot): Экземпляр бота для отправки сообщений
+        state (FSMContext): Контекст FSM
+    """
+    from app.services.user_service import is_premium_active
+    
+    user_id = callback.from_user.id
+    price_rub = settings.PREMIUM_PRICE // 100
+    
+    # Очищаем сохраненный payment_id
+    await state.update_data(yookassa_payment_id=None)
+    
+    async for session in get_db():
+        premium_active = await is_premium_active(session, user_id)
+        
+        await callback.answer("Отменено")
+        
+        if premium_active:
+            await callback.message.edit_text(
+                "💎 У тебя уже есть Premium доступ!\n\n"
+                "Ты можешь пользоваться всеми функциями бота.",
+                reply_markup=get_payment_keyboard(has_premium=True)
+            )
+        else:
+            await callback.message.edit_text(
+                f"💎 Premium доступ\n\n"
+                f"Premium включает:\n"
+                f"✅ Персональный роадмап достижения цели\n"
+                f"✅ Ежедневные задания от ИИ-коуча\n"
+                f"✅ Обратная связь по отчетам\n"
+                f"✅ Трекинг прогресса\n\n"
+                f"Стоимость: {price_rub} руб./месяц",
+                reply_markup=get_payment_keyboard(has_premium=False)
+            )
+        break
 
 
 @router.callback_query(F.data == "subscription_cancel")

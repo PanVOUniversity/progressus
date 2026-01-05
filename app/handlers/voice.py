@@ -121,34 +121,66 @@ async def handle_voice(message: Message, state: FSMContext):
                     
                     # Создаем новое текстовое сообщение с распознанным текстом
                     # и обрабатываем его через диспетчер
-                    from aiogram.types import Update
-                    from app.main import dp
-                    
-                    # Создаем новое сообщение с распознанным текстом
-                    # Копируем структуру исходного сообщения, но заменяем voice на text
-                    message_dict = message.model_dump(mode='json')
-                    message_dict["text"] = text
-                    # Удаляем voice из сообщения
-                    if "voice" in message_dict:
-                        del message_dict["voice"]
-                    
-                    # Создаем Update объект с новым текстовым сообщением
-                    # Используем уникальный update_id чтобы избежать конфликтов
-                    import time
-                    update_data = {
-                        "update_id": int(time.time() * 1000000) + message.message_id,
-                        "message": message_dict
-                    }
-                    
-                    # Обрабатываем через диспетчер
                     try:
-                        update = Update(**update_data)
+                        from aiogram.types import Update, Message as MessageType
+                        from app.main import dp
+                        import time
+                        
+                        # Создаем новое сообщение с текстом на основе исходного
+                        # Используем model_copy для создания копии, исключая voice и другие медиа
+                        message_dict = message.model_dump(exclude={'voice', 'audio', 'document', 'photo', 'sticker', 'video', 'video_note', 'animation'})
+                        message_dict["text"] = text
+                        # Убеждаемся, что message_id уникальный
+                        message_dict["message_id"] = message.message_id + 1000000
+                        
+                        # Создаем новое сообщение из словаря
+                        new_message = MessageType(**message_dict)
+                        
+                        # Создаем Update с новым сообщением
+                        update = Update(
+                            update_id=int(time.time() * 1000000) + message.message_id,
+                            message=new_message
+                        )
+                        
+                        # Обрабатываем через диспетчер
                         await dp.feed_update(message.bot, update)
                         logger.info("Распознанный текст успешно обработан через диспетчер")
                     except Exception as e:
-                        logger.error(f"Ошибка при обработке распознанного текста: {e}", exc_info=True)
-                        # Если не удалось обработать через диспетчер, просто отправляем текст
-                        # и пользователь может отправить его вручную
+                        logger.error(f"Ошибка при обработке распознанного текста через диспетчер: {e}", exc_info=True)
+                        # Если не удалось обработать через диспетчер, пытаемся напрямую вызвать обработчики
+                        current_state = await state.get_state()
+                        logger.info(f"Попытка прямой обработки текста в состоянии {current_state}")
+                        
+                        try:
+                            # Прямая обработка для состояний опроса
+                            # Создаем временное сообщение с текстом
+                            temp_dict = message.model_dump()
+                            temp_dict["text"] = text
+                            if "voice" in temp_dict:
+                                del temp_dict["voice"]
+                            # Удаляем другие медиа-поля
+                            for field in ["audio", "document", "photo", "sticker", "video", "video_note", "animation"]:
+                                if field in temp_dict:
+                                    del temp_dict[field]
+                            
+                            temp_message = MessageType(**temp_dict)
+                            
+                            if current_state == SurveyStates.age:
+                                from app.handlers.survey import process_age
+                                await process_age(temp_message, state)
+                            elif current_state == SurveyStates.name:
+                                from app.handlers.survey import process_name
+                                await process_name(temp_message, state)
+                            elif current_state == SurveyStates.goal_3months:
+                                from app.handlers.survey import process_goal_3months
+                                await process_goal_3months(temp_message, state)
+                            elif current_state == SurveyStates.detailed_questions:
+                                from app.handlers.survey import process_detailed_answer
+                                await process_detailed_answer(temp_message, state)
+                            else:
+                                logger.warning(f"Неизвестное состояние для обработки голосового: {current_state}")
+                        except Exception as direct_error:
+                            logger.error(f"Ошибка при прямой обработке: {direct_error}", exc_info=True)
                 else:
                     logger.warning("SpeechKit вернул пустой результат")
                     await message.answer("❌ Не удалось распознать речь. Попробуйте еще раз.")

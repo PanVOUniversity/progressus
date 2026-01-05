@@ -238,11 +238,27 @@ async def cmd_personalization(callback: CallbackQuery, state: FSMContext):
             await message.answer("Сначала пройди опрос через /start")
             break
         
+        # Проверяем доступность персонализации (после первого использования без премиума)
+        from app.services.user_service import is_premium_active
+        premium_active = await is_premium_active(session, user_id)
+        
+        # Проверяем, использована ли персонализация (если есть хотя бы один ответ)
+        personalization_data = user.personalization_data or {}
+        answers = personalization_data.get("answers", {})
+        personalization_used = len(answers) > 0
+        
+        if not premium_active and personalization_used:
+            await message.answer(
+                "❌ Ты уже использовал бесплатную персонализацию.\n\n"
+                "Для неограниченной персонализации активируй Premium доступ через меню 'Оплата'.",
+                reply_markup=get_main_keyboard()
+            )
+            break
+        
         # Переходим в состояние персонализации
         await state.set_state(SurveyStates.personalization)
         
         # Проверяем счетчик вопросов
-        personalization_data = user.personalization_data or {}
         question_count = personalization_data.get("question_count", 0)
         
         if question_count >= 20:
@@ -282,7 +298,7 @@ async def process_personalization_answer(message: Message, state: FSMContext):
     user_answer = message.text
     
     # Проверяем, не является ли это командой выхода
-    if user_answer in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Помощь", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
+    if user_answer in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
         # Сохраняем данные в БД перед выходом
         await save_personalization_data(user_id, state)
         await state.clear()
@@ -299,6 +315,24 @@ async def process_personalization_answer(message: Message, state: FSMContext):
         
         if not user:
             await message.answer("Сначала пройди опрос через /start")
+            await state.clear()
+            break
+        
+        # Проверяем доступность персонализации (после первого использования без премиума)
+        from app.services.user_service import is_premium_active
+        premium_active = await is_premium_active(session, user_id)
+        
+        # Проверяем, использована ли персонализация (если есть хотя бы один ответ)
+        personalization_data = user.personalization_data or {}
+        answers = personalization_data.get("answers", {})
+        personalization_used = len(answers) > 0
+        
+        if not premium_active and personalization_used:
+            await message.answer(
+                "❌ Ты уже использовал бесплатную персонализацию.\n\n"
+                "Для неограниченной персонализации активируй Premium доступ через меню 'Оплата'.",
+                reply_markup=get_main_keyboard()
+            )
             await state.clear()
             break
         

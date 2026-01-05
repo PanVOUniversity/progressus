@@ -62,19 +62,43 @@ async def generate_roadmap_after_payment(message: Message, state: FSMContext, bo
         
         await state.update_data(roadmap=roadmap)
         
-        # Форматируем и показываем роадмап (новый краткий формат)
-        roadmap_text = f"🗺️ РОАДМАП ДОСТИЖЕНИЯ ЦЕЛИ: {goal_3months}\n\n"
-        roadmap_text += "📅 Первая-вторая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_1_2', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Форматируем и показываем роадмап (новый формат с этапами)
+        roadmap_text = f"🗺️ РОАДМАП: {goal_3months} за 3 месяца\n\n"
         
-        roadmap_text += "📅 Третья-четвертая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_3_4', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Показываем новый формат, если он есть
+        if roadmap.get('stage_1'):
+            for stage_num in [1, 2, 3, 4]:
+                stage_key = f'stage_{stage_num}'
+                stage = roadmap.get(stage_key, {})
+                if stage.get('goal'):
+                    weeks = stage.get('weeks', f'{stage_num*3-2}-{stage_num*3}')
+                    roadmap_text += f"📅 ЭТАП {stage_num} (Недели {weeks})\n"
+                    roadmap_text += f"   🎯 Milestone: {stage.get('goal', '')}\n"
+                    
+                    result = stage.get('result', '')
+                    if result:
+                        roadmap_text += f"   ✅ Результат: {result}\n"
+                    roadmap_text += "\n"
+        else:
+            # Fallback на старый формат для обратной совместимости
+            roadmap_text += "📅 Первая-вторая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_1_2', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Третья-четвертая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_3_4', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Пятая-восьмая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_5_8', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Девятая-двенадцатая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_9_12', {}).get('text', 'Цель будет определена позже')}\n\n"
         
-        roadmap_text += "📅 Пятая-восьмая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_5_8', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Добавляем финальный результат и первый шаг
+        if roadmap.get('final_result'):
+            roadmap_text += f"🎯 ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: {roadmap.get('final_result')}\n\n"
         
-        roadmap_text += "📅 Девятая-двенадцатая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_9_12', {}).get('text', 'Цель будет определена позже')}"
+        if roadmap.get('first_step'):
+            roadmap_text += f"🚀 ПЕРВЫЙ ШАГ СЕГОДНЯ: {roadmap.get('first_step')}"
         
         await message.answer(roadmap_text)
         
@@ -248,6 +272,10 @@ async def process_gender(callback: CallbackQuery, state: FSMContext):
 @router.message(SurveyStates.age)
 async def process_age(message: Message, state: FSMContext):
     """Обработка ответа на вопрос о возрасте."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь число (твой возраст)")
+        return
+    
     try:
         age = int(message.text.strip())
         if age < 1 or age > 150:
@@ -280,6 +308,10 @@ async def process_age(message: Message, state: FSMContext):
 @router.message(SurveyStates.name)
 async def process_name(message: Message, state: FSMContext):
     """Обработка ответа на вопрос об имени."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь текст (твое имя)")
+        return
+    
     name = message.text.strip()
     if len(name) < 2:
         await message.answer("Пожалуйста, укажи свое имя (минимум 2 символа)")
@@ -517,9 +549,13 @@ async def process_spheres_done(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(SurveyStates.detailed_questions)
+@router.message(SurveyStates.detailed_questions, ~F.voice)
 async def process_detailed_answer(message: Message, state: FSMContext):
     """Обработка ответов на развернутые вопросы."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь текстовый ответ на вопрос")
+        return
+    
     data = await state.get_data()
     detailed_questions = data.get("detailed_questions", [])
     detailed_answers = data.get("detailed_answers", {})
@@ -635,6 +671,10 @@ async def process_role_model(callback: CallbackQuery, state: FSMContext):
 @router.message(SurveyStates.goal_3months)
 async def process_goal_3months(message: Message, state: FSMContext):
     """Обработка цели на 3 месяца и генерация роадмапа."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь текст цели, а не другое сообщение")
+        return
+    
     goal_3months = message.text.strip()
     
     if len(goal_3months) < 10:
@@ -684,19 +724,43 @@ async def process_goal_3months(message: Message, state: FSMContext):
         
         await state.update_data(roadmap=roadmap)
         
-        # Форматируем и показываем роадмап (новый краткий формат)
-        roadmap_text = f"🗺️ РОАДМАП ДОСТИЖЕНИЯ ЦЕЛИ: {goal_3months}\n\n"
-        roadmap_text += "📅 Первая-вторая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_1_2', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Форматируем и показываем роадмап (новый формат с этапами)
+        roadmap_text = f"🗺️ РОАДМАП: {goal_3months} за 3 месяца\n\n"
         
-        roadmap_text += "📅 Третья-четвертая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_3_4', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Показываем новый формат, если он есть
+        if roadmap.get('stage_1'):
+            for stage_num in [1, 2, 3, 4]:
+                stage_key = f'stage_{stage_num}'
+                stage = roadmap.get(stage_key, {})
+                if stage.get('goal'):
+                    weeks = stage.get('weeks', f'{stage_num*3-2}-{stage_num*3}')
+                    roadmap_text += f"📅 ЭТАП {stage_num} (Недели {weeks})\n"
+                    roadmap_text += f"   🎯 Milestone: {stage.get('goal', '')}\n"
+                    
+                    result = stage.get('result', '')
+                    if result:
+                        roadmap_text += f"   ✅ Результат: {result}\n"
+                    roadmap_text += "\n"
+        else:
+            # Fallback на старый формат для обратной совместимости
+            roadmap_text += "📅 Первая-вторая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_1_2', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Третья-четвертая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_3_4', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Пятая-восьмая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_5_8', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Девятая-двенадцатая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_9_12', {}).get('text', 'Цель будет определена позже')}\n\n"
         
-        roadmap_text += "📅 Пятая-восьмая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_5_8', {}).get('text', 'Цель будет определена позже')}\n\n"
+        # Добавляем финальный результат и первый шаг
+        if roadmap.get('final_result'):
+            roadmap_text += f"🎯 ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: {roadmap.get('final_result')}\n\n"
         
-        roadmap_text += "📅 Девятая-двенадцатая неделя: "
-        roadmap_text += f"{roadmap.get('weeks_9_12', {}).get('text', 'Цель будет определена позже')}"
+        if roadmap.get('first_step'):
+            roadmap_text += f"🚀 ПЕРВЫЙ ШАГ СЕГОДНЯ: {roadmap.get('first_step')}"
         
         await message.answer(roadmap_text)
         

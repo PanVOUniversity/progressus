@@ -250,7 +250,7 @@ async def reset_user_data(session: AsyncSession, user_id: int) -> User:
     """Сбрасывает данные пользователя, кроме is_premium.
     
     Сбрасывает уровень, категорию, прогресс, рефералов, домашние задания,
-    удаляет все опросы и отчеты, но сохраняет статус premium доступа.
+    персонализацию, консультации, удаляет все опросы и отчеты, но сохраняет статус premium доступа.
     
     Args:
         session (AsyncSession): Асинхронная сессия БД
@@ -282,10 +282,21 @@ async def reset_user_data(session: AsyncSession, user_id: int) -> User:
             category=None,
             category_progress={},
             personality=None,
+            name=None,
+            gender=None,
+            age=None,
+            values=None,
+            development_spheres=None,
+            goal_3months=None,
+            roadmap=None,
             referrals=[],
             referrer_id=None,
             last_report=None,
-            current_homework=None
+            current_homework=None,
+            homework_needs_revision=False,
+            personalization_data=None,
+            consultation_used=False,
+            survey_state=None
         )
     )
     await session.commit()

@@ -5,6 +5,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.keyboards import get_main_menu_keyboard, get_main_keyboard
 from app.database import get_db
@@ -12,9 +13,31 @@ from app.services.user_service import get_or_create_user
 from app.models import User
 from app.states import SurveyStates
 from sqlalchemy import select
+import logging
 
 router = Router()
 """Роутер для обработки главного меню."""
+
+logger = logging.getLogger(__name__)
+
+
+async def safe_callback_answer(callback: CallbackQuery, text: str = None, show_alert: bool = False):
+    """Безопасно отвечает на callback query, обрабатывая ошибки устаревших запросов.
+    
+    Args:
+        callback (CallbackQuery): Callback query для ответа
+        text (str, optional): Текст ответа
+        show_alert (bool): Показывать ли alert вместо уведомления
+    """
+    try:
+        await callback.answer(text=text, show_alert=show_alert)
+    except TelegramBadRequest as e:
+        if "query is too old" in str(e) or "query ID is invalid" in str(e):
+            logger.debug(f"Callback query expired for user {callback.from_user.id}: {e}")
+        else:
+            logger.warning(f"Failed to answer callback query: {e}")
+    except Exception as e:
+        logger.warning(f"Unexpected error answering callback query: {e}")
 
 
 async def show_main_menu(message: Message, state: FSMContext = None, user: User = None):
@@ -62,11 +85,6 @@ async def show_main_menu(message: Message, state: FSMContext = None, user: User 
         menu_text,
         reply_markup=get_main_menu_keyboard()  # Inline кнопки под сообщением
     )
-    # Отправляем постоянную клавиатуру отдельным сообщением
-    await message.answer(
-        "",
-        reply_markup=get_main_keyboard()  # Постоянная клавиатура под клавиатурой
-    )
 
 
 @router.message(F.text.in_(["Меню", "/menu", "menu"]))
@@ -103,7 +121,7 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         user = result.scalar_one_or_none()
         
         if not user or not user.personality:
-            await callback.answer("Сначала пройди опрос через /start, чтобы выбрать своего наставника.")
+            await safe_callback_answer(callback, "Сначала пройди опрос через /start, чтобы выбрать своего наставника.")
             await message.edit_text(
                 "💬 Свободная консультация\n\n"
                 "Сначала пройди опрос через /start, чтобы выбрать своего наставника.",
@@ -121,7 +139,7 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         
         # Если нет премиума и консультация уже использована
         if not premium_active and user.consultation_used:
-            await callback.answer("Бесплатная консультация доступна только один раз", show_alert=True)
+            await safe_callback_answer(callback, "Бесплатная консультация доступна только один раз", show_alert=True)
             await message.edit_text(
                 "💬 Свободная консультация\n\n"
                 "❌ Ты уже использовал бесплатную консультацию.\n\n"
@@ -136,7 +154,7 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         
         # Устанавливаем состояние консультации
         await state.set_state(SurveyStates.consultation)
-        await callback.answer()
+        await safe_callback_answer(callback)
         
         # Показываем предупреждение, если это первая и последняя бесплатная консультация
         if not premium_active and not user.consultation_used:
@@ -174,7 +192,7 @@ async def process_consultation(message: Message, state: FSMContext):
     user_question = message.text
     
     # Проверяем, не является ли это командой меню или рестарта
-    if user_question in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Помощь", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
+    if user_question in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
         # Если это рестарт, выходим из консультации и позволяем обработчику рестарта обработать
         if user_question in ["🔄 Рестарт", "/restart"]:
             await state.clear()
@@ -191,6 +209,19 @@ async def process_consultation(message: Message, state: FSMContext):
         if not user or not user.personality:
             await message.answer(
                 "Сначала пройди опрос через /start, чтобы выбрать своего наставника.",
+                reply_markup=get_main_keyboard()
+            )
+            await state.clear()
+            break
+        
+        # Проверяем доступность консультации (после первого использования без премиума)
+        from app.services.user_service import is_premium_active
+        premium_active = await is_premium_active(session, user_id)
+        
+        if not premium_active and user.consultation_used:
+            await message.answer(
+                "❌ Ты уже использовал бесплатную консультацию.\n\n"
+                "Для неограниченных консультаций активируй Premium доступ через меню 'Оплата'.",
                 reply_markup=get_main_keyboard()
             )
             await state.clear()
@@ -275,7 +306,7 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
         user = result.scalar_one_or_none()
         
         if not user:
-            await callback.answer("Сначала пройди опрос через /start")
+            await safe_callback_answer(callback, "Сначала пройди опрос через /start")
             await message.edit_text(
                 "Сначала пройди опрос через /start",
                 reply_markup=None
@@ -289,9 +320,9 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
         # Проверяем активность премиума
         from app.services.user_service import is_premium_active
         if not await is_premium_active(session, user_id):
-            await callback.answer("Для работы с заданиями нужен Premium доступ")
+            await safe_callback_answer(callback, "Для работы с заданиями нужен Premium доступ")
             await message.edit_text(
-                "Для работы с заданиями нужен Premium доступ. Активируй его через /start",
+                "Для работы с заданиями нужен Premium доступ. Активируй его через меню",
                 reply_markup=None
             )
             await message.answer(
@@ -300,7 +331,7 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
             )
             break
         
-        await callback.answer()
+        await safe_callback_answer(callback)
         
         if user.current_homework:
             # Очищаем состояние FSM, чтобы бот мог принимать отчеты
@@ -336,33 +367,6 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
         break
 
 
-@router.callback_query(F.data == "menu_help")
-async def cmd_help(callback: CallbackQuery, state: FSMContext):
-    """Обработка кнопки "Помощь".
-    
-    Args:
-        callback (CallbackQuery): Callback от inline кнопки
-        state (FSMContext): Контекст FSM
-    """
-    help_text = "❓ Помощь\n\n"
-    help_text += "📋 Основные команды:\n"
-    help_text += "/start - Начать работу с ботом\n"
-    help_text += "/menu или кнопка 'Меню' - Главное меню\n"
-    help_text += "/ref - Получить реферальную ссылку\n"
-    help_text += "/restart - Рестарт бота (сброс данных)\n\n"
-    help_text += "💡 Как пользоваться:\n"
-    help_text += "1. Пройди опрос через /start\n"
-    help_text += "2. Получи персональное задание\n"
-    help_text += "3. Выполни задание и отправь отчет\n"
-    help_text += "4. Получи обратную связь и новое задание\n\n"
-    help_text += "Если у тебя есть вопросы, напиши их здесь!"
-    
-    await callback.answer()
-    await callback.message.edit_text(help_text, reply_markup=None)
-    await callback.message.answer(
-        "",
-        reply_markup=get_main_keyboard()
-    )
 
 
 @router.callback_query(F.data == "menu_payment")
@@ -384,10 +388,11 @@ async def cmd_payment(callback: CallbackQuery, state: FSMContext):
     message = callback.message
     price_rub = settings.PREMIUM_PRICE // 100
     
+    # Отвечаем на callback сразу, до долгих операций
+    await safe_callback_answer(callback)
+    
     async for session in get_db():
         premium_active = await is_premium_active(session, user_id)
-        
-        await callback.answer()
         
         if premium_active:
             await message.edit_text(
@@ -459,7 +464,7 @@ async def cmd_referral_program(callback: CallbackQuery, state: FSMContext):
             f"🎁 За {stats['referrals_for_premium']} оплативших реферала - месяц Premium в подарок!"
         )
         
-        await callback.answer()
+        await safe_callback_answer(callback)
         await message.edit_text(
             referral_text,
             reply_markup=get_share_referral_keyboard(referral_link),

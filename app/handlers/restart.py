@@ -40,7 +40,8 @@ async def cmd_restart(message: Message, state: FSMContext):
         "• Категория и прогресс\n"
         "• Рефералы\n"
         "• Домашние задания\n"
-        "• Отчеты\n\n"
+        "• Отчеты\n"
+        "• Персонализация (все ответы и вопросы)\n\n"
         "❌ Premium статус НЕ будет сброшен.\n\n"
         "Ты уверен, что хочешь продолжить?",
         reply_markup=get_restart_confirmation_keyboard()
@@ -81,11 +82,6 @@ async def restart_confirm(callback: CallbackQuery, state: FSMContext):
         "Твой пол?",
         reply_markup=get_gender_keyboard()
     )
-    # Устанавливаем постоянную клавиатуру
-    await callback.message.answer(
-        "",
-        reply_markup=get_main_keyboard()
-    )
     await callback.answer("Данные сброшены!")
 
 
@@ -103,7 +99,7 @@ async def restart_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Рестарт отменен.")
     # Устанавливаем постоянную клавиатуру
     await callback.message.answer(
-        "",
+        "Меню:",
         reply_markup=get_main_keyboard()
     )
     await callback.answer("Рестарт отменен")

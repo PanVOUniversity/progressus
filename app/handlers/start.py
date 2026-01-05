@@ -104,10 +104,6 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                             else:
                                 await message.answer("Продолжаем опрос...")
                             
-                            await message.answer(
-                                "",
-                                reply_markup=get_main_keyboard()
-                            )
                             return True
             except Exception as e:
                 logger.error(f"Ошибка восстановления состояния: {e}", exc_info=True)
@@ -160,10 +156,6 @@ async def cmd_start(message: Message, state: FSMContext):
                 "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
                         "Твой пол?",
                         reply_markup=get_gender_keyboard()
-            )
-            await message.answer(
-                "",
-                reply_markup=get_main_keyboard()
             )
         else:
             # Показываем согласие на ПД
@@ -241,10 +233,6 @@ async def cmd_start_with_ref(message: Message, state: FSMContext):
                 "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
                         "Твой пол?",
                         reply_markup=get_gender_keyboard()
-            )
-            await message.answer(
-                "",
-                reply_markup=get_main_keyboard()
             )
         else:
             await state.set_state(SurveyStates.privacy_consent)

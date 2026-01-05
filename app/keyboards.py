@@ -165,6 +165,7 @@ def get_payment_keyboard(has_premium: bool = False) -> InlineKeyboardMarkup:
     else:
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=f"💳 Оплатить {price_rub} руб.", callback_data="payment_start")],
+            [InlineKeyboardButton(text="💳 Оплатить через СБП", callback_data="payment_sbp_start")],
             [InlineKeyboardButton(text="🎟️ Ввести промокод", callback_data="promo_code_enter")]
         ])
 
@@ -205,7 +206,6 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Свободная консультация", callback_data="menu_consultation")],
         [InlineKeyboardButton(text="Задания", callback_data="menu_tasks")],
         [InlineKeyboardButton(text="Персонализация", callback_data="menu_personalization")],
-        [InlineKeyboardButton(text="Помощь", callback_data="menu_help")],
         [InlineKeyboardButton(text="Оплата", callback_data="menu_payment")],
         [InlineKeyboardButton(text="Реферальная программа", callback_data="menu_referral")]
     ])

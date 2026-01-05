@@ -24,24 +24,49 @@ client = AsyncOpenAI(
 
 
 def clean_markdown(text: str) -> str:
-    """Удаляет markdown форматирование и звездочки из текста.
+    """Удаляет только звездочки для выделения текста, сохраняя остальное форматирование.
     
     Args:
         text (str): Текст с возможным markdown форматированием
         
     Returns:
-        str: Очищенный текст без звездочек и markdown
+        str: Текст без звездочек для выделения, но с сохранением остального форматирования
     """
     if not text:
         return text
     
-    # Убираем звездочки и markdown
-    text = text.replace('**', '').replace('*', '').replace('__', '').replace('_', '')
-    text = text.replace('`', '').replace('```', '').replace('#', '').replace('##', '')
-    # Убираем лишние пробелы
-    text = ' '.join(text.split())
+    import re
     
-    return text.strip()
+    # Убираем только звездочки для выделения текста (bold/italic)
+    # 1. Удаляем двойные звездочки ** для bold
+    text = text.replace('**', '')
+    
+    # 2. Удаляем одиночные звездочки * для italic
+    # Сохраняем звездочки в начале строки (для списков markdown: "* пункт")
+    # Удаляем звездочки, которые используются для выделения текста (*текст*)
+    lines = text.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # Если строка начинается с "* " (список), сохраняем звездочку
+        if line.strip().startswith('* '):
+            # Удаляем только звездочки внутри текста, но сохраняем первую для списка
+            cleaned_line = '* ' + re.sub(r'\*', '', line[2:])
+            cleaned_lines.append(cleaned_line)
+        else:
+            # Для остальных строк удаляем все звездочки
+            cleaned_line = line.replace('*', '')
+            cleaned_lines.append(cleaned_line)
+    
+    text = '\n'.join(cleaned_lines)
+    
+    # НЕ удаляем и сохраняем:
+    # - Заголовки (#, ##, ###)
+    # - Списки (-, 1.)
+    # - Код (` и ```)
+    # - Подчеркивания (__ и _)
+    # - Другие markdown элементы
+    
+    return text
 
 
 def _map_role_model_to_personality(role_model: str) -> str:
@@ -351,25 +376,36 @@ async def generate_roadmap(
     goal_3months: str,
     basic_answers: Dict,
     detailed_answers: Dict,
-    role_model: str
+    role_model: str,
+    current_level: int = 0,
+    category: str = None
 ) -> Dict:
     """Генерирует роадмап достижения цели на 3 месяца.
     
     На основе цели пользователя, его ответов и ролевой модели создает
-    роадмап с промежуточными milestone (недели 1-2, 3-4, 5-8, 9-12).
+    роадмап с промежуточными milestone (недели 1-3, 4-6, 7-9, 10-12).
     
     Args:
         goal_3months (str): Цель пользователя на 3 месяца
         basic_answers (Dict): Базовые ответы пользователя
         detailed_answers (Dict): Развернутые ответы пользователя
         role_model (str): Выбранная ролевая модель
+        current_level (int): Текущий уровень пользователя (по умолчанию 0)
+        category (str): Категория развития (finances/health/mental)
         
     Returns:
         Dict: Словарь с роадмапом:
-            - weeks_1_2: {"goal": str, "result": str, "actions": List[str]}
-            - weeks_3_4: {"goal": str, "result": str, "actions": List[str]}
-            - weeks_5_8: {"goal": str, "result": str, "actions": List[str]}
-            - weeks_9_12: {"goal": str, "result": str, "actions": List[str]}
+            - stage_1: {"weeks": "1-3", "goal": str, "actions": List[str], "result": str}
+            - stage_2: {"weeks": "4-6", "goal": str, "actions": List[str], "result": str}
+            - stage_3: {"weeks": "7-9", "goal": str, "actions": List[str], "result": str}
+            - stage_4: {"weeks": "10-12", "goal": str, "actions": List[str], "result": str}
+            - first_step: str
+            - final_result: str
+            # Для обратной совместимости также сохраняем старый формат
+            - weeks_1_2: {"text": str}
+            - weeks_3_4: {"text": str}
+            - weeks_5_8: {"text": str}
+            - weeks_9_12: {"text": str}
         
     Example:
         .. code-block:: python
@@ -386,47 +422,68 @@ async def generate_roadmap(
     personality_name = personality_data.get("name", role_model)
     personality_description = personality_data.get("description", "")
     
-    prompt = f"""Ты - {personality_name}, наставник пользователя. Создай краткий роадмап достижения цели пользователя на 3 месяца, используя ТВОЙ подход, ТВОЮ философию и ТВОЙ стиль.
+    # Определяем архетип на основе данных пользователя
+    values = basic_answers.get('values', [])
+    development_spheres = basic_answers.get('development_spheres', [])
+    
+    # Определяем архетип (упрощенная логика)
+    archetype = "Результат-ориентированный"  # по умолчанию
+    if "Разум" in development_spheres or "Коммуникации" in development_spheres:
+        archetype = "Аналитичный"
+    if any(v in ["лидерство", "власть", "влияние"] for v in values):
+        archetype = "Лидерский"
+    
+    # Определяем текущий статус
+    current_status = "начинающий"
+    if current_level > 3:
+        current_status = "есть опыт"
+    elif current_level > 0:
+        current_status = "есть база"
+    
+    # Определяем текущий статус для промпта
+    status_text = "старт с нуля" if current_status == "начинающий" else "есть база" if current_level > 0 else "есть опыт"
+    
+    prompt = f"""ПРАВИЛО: Ты — AI-коуч, который строит короткий, конкретный роадмап достижения цели пользователя за 3 месяца (12 недель). Твоя задача — разбить цель на 4 понятных этапа с четкими результатами (milestones), без лишней воды.
 
-{personality_description}
+ВХОДНЫЕ ДАННЫЕ:
+Цель пользователя на 3 месяца: {goal_3months}
+Текущий статус: {status_text}
 
-Цель пользователя: {goal_3months}
+ЗАДАЧА:
+1) Разбей цель на 4 логичных этапа:
+   Этап 1: старт и базовая валидация
+   Этап 2: первые стабильные результаты
+   Этап 3: заметный рост
+   Этап 4: выход на целевой результат
 
-Информация о пользователе:
-- Пол: {basic_answers.get('gender', 'не указано')}
-- Возраст: {basic_answers.get('age', 'не указано')}
-- Ценности: {', '.join(basic_answers.get('values', []))}
-- Сферы развития: {', '.join(basic_answers.get('development_spheres', []))}
+2) Для каждого этапа укажи только:
+   Milestone: один конкретный измеримый результат
+   Результат: одна короткая фраза, описывающая смысл этапа
 
-Развернутые ответы пользователя:
-{chr(10).join([f"{k}: {v}" for k, v in detailed_answers.items()])}
+СТРУКТУРА ОТВЕТА:
 
-КРИТИЧЕСКИ ВАЖНО: Создай роадмап так, как бы это сделал {personality_name}. Используй:
-- ТВОЙ подход к достижению целей
-- ТВОЮ философию и методы работы
-- ТВОЙ стиль общения и манеру речи
-- ТВОИ принципы и ценности
-- ТВОЙ способ мотивации
+РОАДМАП НА 3 МЕСЯЦА: {goal_3months}
 
-Создай краткий роадмап на 4 этапа. Для каждого этапа напиши ОДНУ фразу в 20-30 слов, которая описывает что мы добьёмся на этом этапе, используя ТВОЙ подход.
+Этап 1 (1–3 недели)
+Milestone: {{конкретный измеримый результат}}
+Результат: {{1 короткая фраза}}
 
-КРИТИЧЕСКИ ВАЖНО - Формат ответа (строго соблюдай, каждая неделя на отдельной строке):
-НЕДЕЛЯ 1-2: [одна фраза в 20-30 слов о том, что добьёмся, в стиле {personality_name}]
+Этап 2 (4–6 недели)
+Milestone: {{конкретный измеримый результат}}
+Результат: {{1 короткая фраза}}
 
-НЕДЕЛЯ 3-4: [одна фраза в 20-30 слов о том, что добьёмся, в стиле {personality_name}]
+Этап 3 (7–9 недели)
+Milestone: {{конкретный измеримый результат}}
+Результат: {{1 короткая фраза}}
 
-НЕДЕЛЯ 5-8: [одна фраза в 20-30 слов о том, что добьёмся, в стиле {personality_name}]
+Этап 4 (10–12 недели)
+Milestone: {{конечный целевой результат}}
+Результат: {{1 короткая фраза}}
 
-НЕДЕЛЯ 9-12: [одна фраза в 20-30 слов о финальной цели, в стиле {personality_name}]
+Первый шаг сегодня: {{одно самое логичное действие прямо сейчас}}
 
-Важно: 
-- Каждая неделя должна быть на ОТДЕЛЬНОЙ строке
-- Каждая фраза должна быть краткой (20-30 слов), мотивирующей и конкретной
-- Говори КАК {personality_name}, используй его стиль общения, манеру речи, подход и философию
-- Не используй звездочки, маркеры или форматирование
-- Не объединяй несколько недель в одну строку - каждая неделя должна быть отдельно
-
-ВАЖНО: Не форматируй текст *. Пиши обычным текстом без звездочек и форматирования."""
+ПРАВИЛА ОФОРМЛЕНИЯ:
+Markdown: используй текстовые заголовки и абзацы, но не используй символы # и * для форматирования. Ответ должен быть читабельным блоком текста с разделением на строки, как в этом примере."""
 
     response = await client.chat.completions.create(
         model=settings.OPENROUTER_MODEL,
@@ -435,7 +492,7 @@ async def generate_roadmap(
             {"role": "user", "content": prompt}
         ],
         temperature=0.7,
-        max_tokens=1500
+        max_tokens=2000
     )
     
     result = response.choices[0].message.content
@@ -443,95 +500,94 @@ async def generate_roadmap(
     # Убираем звездочки и markdown форматирование
     result = clean_markdown(result)
     
-    # Парсим роадмап - теперь это просто текст для каждой недели
+    # Парсим новый формат роадмапа
     roadmap = {
+        "stage_1": {"weeks": "1-3", "goal": "", "actions": [], "result": ""},
+        "stage_2": {"weeks": "4-6", "goal": "", "actions": [], "result": ""},
+        "stage_3": {"weeks": "7-9", "goal": "", "actions": [], "result": ""},
+        "stage_4": {"weeks": "10-12", "goal": "", "actions": [], "result": ""},
+        "first_step": "",
+        "final_result": "",
+        # Для обратной совместимости
         "weeks_1_2": {"text": ""},
         "weeks_3_4": {"text": ""},
         "weeks_5_8": {"text": ""},
         "weeks_9_12": {"text": ""}
     }
     
-    # Улучшенный парсинг: сначала пытаемся найти маркеры недель в тексте
-    # GPT может вернуть все в одной строке или с разными разделителями
-    
-    # Ищем паттерны типа "НЕДЕЛЯ 1-2:", "НЕДЕЛЯ 3-4:" и т.д.
+    # Парсим новый формат роадмапа (Milestone и Результат)
     import re
     
-    # Паттерны для поиска недель
-    week_patterns = {
-        "weeks_1_2": re.compile(r'НЕДЕЛЯ\s*1-2\s*:?\s*(.+?)(?=НЕДЕЛЯ\s*3-4|НЕДЕЛЯ\s*5-8|НЕДЕЛЯ\s*9-12|$)', re.IGNORECASE | re.DOTALL),
-        "weeks_3_4": re.compile(r'НЕДЕЛЯ\s*3-4\s*:?\s*(.+?)(?=НЕДЕЛЯ\s*5-8|НЕДЕЛЯ\s*9-12|$)', re.IGNORECASE | re.DOTALL),
-        "weeks_5_8": re.compile(r'НЕДЕЛЯ\s*5-8\s*:?\s*(.+?)(?=НЕДЕЛЯ\s*9-12|$)', re.IGNORECASE | re.DOTALL),
-        "weeks_9_12": re.compile(r'НЕДЕЛЯ\s*9-12\s*:?\s*(.+?)$', re.IGNORECASE | re.DOTALL),
-    }
+    # Парсим построчно для более точного извлечения
+    lines = result.split('\n')
+    current_stage = None
     
-    # Пробуем найти по паттернам
-    for week_key, pattern in week_patterns.items():
-        match = pattern.search(result)
-        if match:
-            text = match.group(1).strip()
-            # Очищаем от лишних пробелов и переносов строк
-            text = ' '.join(text.split())
-            # Убираем маркеры других недель, если они попали в текст
-            text = re.sub(r'НЕДЕЛЯ\s*\d+[-–]\d+.*$', '', text, flags=re.IGNORECASE).strip()
-            if text:
-                roadmap[week_key]["text"] = text
-    
-    # Если паттерны не сработали, пробуем построчный парсинг
-    if not any(roadmap[k]["text"] for k in roadmap.keys()):
-        lines = result.split('\n')
-        current_week = None
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
         
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Определяем неделю
-            if re.search(r'НЕДЕЛЯ\s*1[-–]?2', line, re.IGNORECASE):
-                current_week = "weeks_1_2"
-                # Извлекаем текст после маркера недели
-                text = re.sub(r'НЕДЕЛЯ\s*1[-–]?2\s*:?\s*', '', line, flags=re.IGNORECASE).strip()
-                if text:
-                    roadmap[current_week]["text"] = text
-            elif re.search(r'НЕДЕЛЯ\s*3[-–]?4', line, re.IGNORECASE):
-                current_week = "weeks_3_4"
-                text = re.sub(r'НЕДЕЛЯ\s*3[-–]?4\s*:?\s*', '', line, flags=re.IGNORECASE).strip()
-                if text:
-                    roadmap[current_week]["text"] = text
-            elif re.search(r'НЕДЕЛЯ\s*5[-–]?8', line, re.IGNORECASE):
-                current_week = "weeks_5_8"
-                text = re.sub(r'НЕДЕЛЯ\s*5[-–]?8\s*:?\s*', '', line, flags=re.IGNORECASE).strip()
-                if text:
-                    roadmap[current_week]["text"] = text
-            elif re.search(r'НЕДЕЛЯ\s*9[-–]?12', line, re.IGNORECASE):
-                current_week = "weeks_9_12"
-                text = re.sub(r'НЕДЕЛЯ\s*9[-–]?12\s*:?\s*', '', line, flags=re.IGNORECASE).strip()
-                if text:
-                    roadmap[current_week]["text"] = text
-            elif current_week and line:
-                # Продолжение текста для текущей недели (только если это не маркер другой недели)
-                if not re.search(r'НЕДЕЛЯ\s*\d+', line, re.IGNORECASE):
-                    if roadmap[current_week]["text"]:
-                        roadmap[current_week]["text"] += " " + line
-                    else:
-                        roadmap[current_week]["text"] = line
+        # Определяем этап (поддерживаем разные варианты написания: 1-3, 1–3, 1—3)
+        if re.search(r'Этап\s*1\s*\([1-3][–—\-]\s*[1-3]\s*недели?\)', line, re.IGNORECASE):
+            current_stage = "stage_1"
+        elif re.search(r'Этап\s*2\s*\([4-6][–—\-]\s*[4-6]\s*недели?\)', line, re.IGNORECASE):
+            current_stage = "stage_2"
+        elif re.search(r'Этап\s*3\s*\([7-9][–—\-]\s*[7-9]\s*недели?\)', line, re.IGNORECASE):
+            current_stage = "stage_3"
+        elif re.search(r'Этап\s*4\s*\(1[0-2][–—\-]\s*1[0-2]\s*недели?\)', line, re.IGNORECASE):
+            current_stage = "stage_4"
+        # Определяем Milestone (цель этапа) - может быть на той же или следующей строке
+        elif re.search(r'Milestone:', line, re.IGNORECASE) and current_stage:
+            milestone_match = re.search(r'Milestone:\s*(.+)', line, re.IGNORECASE)
+            if milestone_match:
+                milestone_text = milestone_match.group(1).strip()
+                if milestone_text:
+                    roadmap[current_stage]["goal"] = milestone_text
+                # Если на следующей строке есть продолжение
+                elif i + 1 < len(lines) and lines[i + 1].strip() and not re.search(r'Результат:', lines[i + 1], re.IGNORECASE):
+                    roadmap[current_stage]["goal"] = lines[i + 1].strip()
+        # Определяем Результат этапа
+        elif re.search(r'Результат:', line, re.IGNORECASE) and current_stage:
+            result_match = re.search(r'Результат:\s*(.+)', line, re.IGNORECASE)
+            if result_match:
+                result_text = result_match.group(1).strip()
+                if result_text:
+                    roadmap[current_stage]["result"] = result_text
+                # Если на следующей строке есть продолжение
+                elif i + 1 < len(lines) and lines[i + 1].strip() and not re.search(r'(Этап|Milestone|Первый шаг)', lines[i + 1], re.IGNORECASE):
+                    roadmap[current_stage]["result"] = lines[i + 1].strip()
+        # Первый шаг
+        elif re.search(r'Первый шаг сегодня:', line, re.IGNORECASE):
+            step_match = re.search(r'Первый шаг сегодня:\s*(.+)', line, re.IGNORECASE)
+            if step_match:
+                step_text = step_match.group(1).strip()
+                if step_text:
+                    roadmap["first_step"] = step_text
+                # Если на следующей строке есть продолжение
+                elif i + 1 < len(lines) and lines[i + 1].strip():
+                    roadmap["first_step"] = lines[i + 1].strip()
     
-    # Проверяем, что все недели имеют текст
-    # Если какая-то неделя не заполнена, генерируем дефолтную цель на основе общей цели
-    for week_key in ["weeks_1_2", "weeks_3_4", "weeks_5_8", "weeks_9_12"]:
-        if not roadmap[week_key]["text"] or roadmap[week_key]["text"].strip() == "":
-            # Генерируем дефолтную цель на основе общей цели пользователя
-            if week_key == "weeks_1_2":
-                roadmap[week_key]["text"] = f"Начать движение к цели: {goal_3months[:50]}"
-            elif week_key == "weeks_3_4":
-                roadmap[week_key]["text"] = f"Продолжить активные действия для достижения цели"
-            elif week_key == "weeks_5_8":
-                roadmap[week_key]["text"] = f"Ускорить прогресс и закрепить результаты"
-            else:  # weeks_9_12
-                roadmap[week_key]["text"] = f"Достичь финальной цели: {goal_3months[:50]}"
-        # Очищаем от лишних пробелов
-        roadmap[week_key]["text"] = ' '.join(roadmap[week_key]["text"].split())
+    # Финальный результат берем из milestone этапа 4
+    if roadmap["stage_4"]["goal"]:
+        roadmap["final_result"] = roadmap["stage_4"]["goal"]
+    
+    # Заполняем дефолтные значения, если что-то не распарсилось
+    for stage_key in ["stage_1", "stage_2", "stage_3", "stage_4"]:
+        if not roadmap[stage_key]["goal"]:
+            roadmap[stage_key]["goal"] = f"Продолжить движение к цели: {goal_3months[:50]}"
+        if not roadmap[stage_key]["result"]:
+            roadmap[stage_key]["result"] = "Прогресс в достижении цели"
+    
+    if not roadmap["first_step"]:
+        roadmap["first_step"] = f"Начать работу над целью: {goal_3months[:50]}"
+    if not roadmap["final_result"]:
+        roadmap["final_result"] = f"Достижение цели: {goal_3months}"
+    
+    # Создаем обратно совместимый формат для старого кода
+    roadmap["weeks_1_2"]["text"] = roadmap["stage_1"]["goal"]
+    roadmap["weeks_3_4"]["text"] = roadmap["stage_2"]["goal"]
+    roadmap["weeks_5_8"]["text"] = roadmap["stage_3"]["goal"]
+    roadmap["weeks_9_12"]["text"] = roadmap["stage_4"]["goal"]
     
     return roadmap
 
@@ -772,9 +828,16 @@ async def generate_first_homework(
     elif "Разум" in development_spheres or "Коммуникации" in development_spheres:
         category = "mental"
     
-    # Получаем первый этап роадмапа
-    first_stage = roadmap.get("weeks_1_2", {})
-    first_stage_text = first_stage.get("text", "")
+    # Получаем первый этап роадмапа (новый формат или старый для обратной совместимости)
+    first_stage = roadmap.get("stage_1", {})
+    if first_stage and first_stage.get("goal"):
+        first_stage_text = f"{first_stage.get('goal', '')}"
+        if first_stage.get('actions'):
+            first_stage_text += f" Действия: {', '.join(first_stage.get('actions', [])[:3])}"
+    else:
+        # Fallback на старый формат
+        first_stage = roadmap.get("weeks_1_2", {})
+        first_stage_text = first_stage.get("text", "")
     
     prompt = f"""Ты - {personality_name}, наставник пользователя. Создай ОДНО первое домашнее задание уровня 0, используя ТВОЙ подход, ТВОЮ философию и ТВОЙ стиль.
 
@@ -787,7 +850,7 @@ async def generate_first_homework(
 - Сферы развития: {', '.join(basic_answers.get('development_spheres', []))}
 - Цель на 3 месяца: {goal_3months}
 
-Первый этап роадмапа (недели 1-2): {first_stage_text}
+Первый этап роадмапа (недели 1-3): {first_stage_text}
 
 Развернутые ответы пользователя:
 {chr(10).join([f"- {k}: {v}" for k, v in detailed_answers.items()])}

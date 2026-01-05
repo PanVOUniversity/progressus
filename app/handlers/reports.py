@@ -232,7 +232,6 @@ async def process_report(message: Message, state: FSMContext):
                                 clean_homework = clean_homework[1:].strip()
                 
                 await message.answer(
-                    f"⚠️ Меня не устраивает проделанная работа. Такой подход не принесет результат.\n\n"
                     f"{clean_markdown(clean_feedback)}\n\n"
                     f"📝 Правки к ДЗ:\n{clean_markdown(clean_homework)}\n\n"
                     f"Переделай задание с учетом этих правок и отправь новый отчет."
