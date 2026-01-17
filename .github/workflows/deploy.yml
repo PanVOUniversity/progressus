@@ -1,0 +1,98 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Позволяет запускать вручную из GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+      
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "echo 'Connection OK'"
+      
+      - name: Create backup
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            cd ${{ secrets.SERVER_PATH }}
+            mkdir -p backups
+            docker compose exec -T postgres pg_dump -U progressus progressusbot > backups/backup_$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo "Backup skipped (container may not be running)"
+          EOF
+      
+      - name: Sync files to server
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.gitignore' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            --exclude='logs' \
+            --exclude='docs' \
+            --exclude='_static' \
+            --exclude='_templates' \
+            --exclude='backups' \
+            --exclude='.idea' \
+            --exclude='.vscode' \
+            --exclude='ssh' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='*.pyo' \
+            --exclude='*.pyd' \
+            --exclude='description_before_start_and_commands.png' \
+            --exclude='CJM.uml' \
+            --exclude='.rsync_exclude' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:${{ secrets.SERVER_PATH }}/
+      
+      - name: Stop containers
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            cd ${{ secrets.SERVER_PATH }}
+            docker compose down || true
+          EOF
+      
+      - name: Apply migrations
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            cd ${{ secrets.SERVER_PATH }}
+            docker compose up -d postgres redis
+            sleep 5
+            docker compose run --rm bot python -m alembic upgrade head || echo "Migrations failed"
+          EOF
+      
+      - name: Restart containers
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            cd ${{ secrets.SERVER_PATH }}
+            docker compose up --build -d
+          EOF
+      
+      - name: Check container status
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            cd ${{ secrets.SERVER_PATH }}
+            echo "=== Container Status ==="
+            docker compose ps
+            echo ""
+            echo "=== Bot logs (last 30 lines) ==="
+            docker compose logs --tail=30 bot || true
+          EOF
+      
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
