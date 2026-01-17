@@ -378,7 +378,10 @@ async def generate_roadmap(
     detailed_answers: Dict,
     role_model: str,
     current_level: int = 0,
-    category: str = None
+    category: str = None,
+    user_vision: str = None,
+    feedback: str = None,
+    previous_roadmap: Dict = None
 ) -> Dict:
     """Генерирует роадмап достижения цели на 3 месяца.
     
@@ -392,6 +395,9 @@ async def generate_roadmap(
         role_model (str): Выбранная ролевая модель
         current_level (int): Текущий уровень пользователя (по умолчанию 0)
         category (str): Категория развития (finances/health/mental)
+        user_vision (str, optional): Видение роадмапа от пользователя (до генерации)
+        feedback (str, optional): Пожелания по улучшению роадмапа (для переделки)
+        previous_roadmap (Dict, optional): Предыдущий роадмап (для переделки)
         
     Returns:
         Dict: Словарь с роадмапом:
@@ -443,11 +449,20 @@ async def generate_roadmap(
     # Определяем текущий статус для промпта
     status_text = "старт с нуля" if current_status == "начинающий" else "есть база" if current_level > 0 else "есть опыт"
     
+    # Формируем дополнительную информацию для промпта
+    vision_text = ""
+    if user_vision:
+        vision_text = f"\nВидение пользователя по роадмапу: {user_vision}"
+    
+    feedback_text = ""
+    if feedback and previous_roadmap:
+        feedback_text = f"\n\nВАЖНО: Пользователь указал, что в предыдущем роадмапе что-то упущено.\nПожелания пользователя: {feedback}\n\nПеределай роадмап с учетом этих пожеланий."
+    
     prompt = f"""ПРАВИЛО: Ты — AI-коуч, который строит короткий, конкретный роадмап достижения цели пользователя за 3 месяца (12 недель). Твоя задача — разбить цель на 4 понятных этапа с четкими результатами (milestones), без лишней воды.
 
 ВХОДНЫЕ ДАННЫЕ:
 Цель пользователя на 3 месяца: {goal_3months}
-Текущий статус: {status_text}
+Текущий статус: {status_text}{vision_text}{feedback_text}
 
 ЗАДАЧА:
 1) Разбей цель на 4 логичных этапа:
@@ -597,7 +612,11 @@ async def evaluate_report_with_revision(
     category: str,
     report_text: str,
     previous_homework: str,
-    personality_key: str = "andrew_tate"
+    personality_key: str = "andrew_tate",
+    user_goal: str = None,
+    user_archetype: str = None,
+    user_values: str = None,
+    user_role_model: str = None
 ) -> tuple[str, int, str, bool]:
     """Оценивает отчет пользователя по ДЗ с возможностью правок.
     
@@ -612,6 +631,10 @@ async def evaluate_report_with_revision(
         report_text (str): Текст отчета пользователя о выполнении ДЗ
         previous_homework (str): Текст предыдущего домашнего задания
         personality_key (str): Ключ личности коуча. По умолчанию andrew_tate.
+        user_goal (str): Цель пользователя (опционально)
+        user_archetype (str): Архетип пользователя (опционально)
+        user_values (str): Ценности пользователя (опционально)
+        user_role_model (str): Ролевая модель пользователя (опционально)
         
     Returns:
         tuple[str, int, str, bool]: Кортеж из четырех элементов:
@@ -624,6 +647,14 @@ async def evaluate_report_with_revision(
         Если needs_revision=True, то new_homework_or_revision содержит правки к текущему ДЗ.
         Если needs_revision=False, то new_homework_or_revision содержит новое ДЗ для следующего уровня.
     """
+    try:
+        from app.prompts.homework_analysis import ANALYSIS_PROMPT_TEMPLATE
+    except ImportError as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Не удалось импортировать ANALYSIS_PROMPT_TEMPLATE: {e}")
+        ANALYSIS_PROMPT_TEMPLATE = None
+    
     personality_data = get_personality_prompt(personality_key)
     personality_name = personality_data.get("name", "наставник")
     personality_description = personality_data.get("description", "")
@@ -632,49 +663,100 @@ async def evaluate_report_with_revision(
     next_level = min(user_level + 1, 10)
     prev_level = max(user_level - 1, 0)
     
-    # Используем промпт для оценки с возможностью правок
-    prompt = f"""Ты - {personality_name}, наставник пользователя. Оцени отчет пользователя по ДЗ уровня {user_level}, категория {category}, используя ТВОЙ подход, ТВОЮ философию и ТВОИ стандарты.
-
-{personality_description}
+    # Подготавливаем данные для промпта
+    goal_text = user_goal or "достижение цели"
+    archetype_text = user_archetype or "Результат-ориентированный"
+    values_text = user_values or "Деньги, Власть, Действие"
+    role_model_text = user_role_model or personality_name
+    
+    # Формируем промпт на основе шаблона анализа
+    # Заменяем только нужные плейсхолдеры, остальные оставляем как есть (они для примера GPT)
+    if ANALYSIS_PROMPT_TEMPLATE:
+        try:
+            analysis_prompt = ANALYSIS_PROMPT_TEMPLATE
+            # Заменяем конкретные плейсхолдеры через replace
+            replacements = {
+                "{исходноезадание}": str(previous_homework or ""),
+                "{цельпользователя}": str(goal_text or ""),
+                "{архетип}": str(archetype_text or ""),
+                "{ценности}": str(values_text or ""),
+                "{ролеваямодель}": str(role_model_text or ""),
+                "{полныйответпользователя}": str(report_text or "")
+            }
+            for placeholder, value in replacements.items():
+                analysis_prompt = analysis_prompt.replace(placeholder, value)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка при форматировании промпта анализа: {e}", exc_info=True)
+            # Используем fallback промпт
+            analysis_prompt = None
+    else:
+        analysis_prompt = None
+    
+    if not analysis_prompt:
+        # Если шаблон не поддерживает форматирование, используем базовый промпт
+        analysis_prompt = f"""Ты - {personality_name}, наставник пользователя. Проанализируй отчет пользователя по ДЗ.
 
 Предыдущее ДЗ: {previous_homework}
+Цель пользователя: {goal_text}
+Ответ пользователя: {report_text}
 
-Отчет пользователя: {report_text}
+КРИТИЧНОЕ ПРАВИЛО №1 — ПРИНИМАЙ ВСЕ:
+• Частично выполнено? Принимай и оцени как есть
+• Альтернативное решение? Оцени альтернативу
+• "Уже делал раньше"? Принимай как факт и переходи дальше
+• НИКОГДА не требуй "переделай точно по заданию"
 
-КРИТИЧЕСКИ ВАЖНО: Оцени работу так, как бы это сделал {personality_name}. Используй:
-- ТВОИ стандарты качества и выполнения
-- ТВОЙ подход к оценке результатов
-- ТВОЮ философию и принципы
-- ТВОЙ стиль общения и манеру речи
-- ТВОЙ способ мотивации и критики
+КРИТИЧНОЕ ПРАВИЛО №2 — ХВАЛИ + РУГАЙ ПО ДЕЛУ:
+• Хорошо сделано = конкретная похвала + пример
+• Плохо сделано = конкретная критика + 1 совет как улучшить
+• Всегда давай НОВОЕ задание вперед, НЕ переделку старого
 
-Определи:
-1. Выполнено ли ДЗ хорошо по ТВОИМ стандартам? (можно переходить к новому ДЗ уровня {next_level})
-2. Или выполнено плохо по ТВОИМ стандартам? (требуются правки к текущему ДЗ)
+ТОН: 70% похвала + 30% честная критика
+НИКОГДА не пиши "переделай задание X"
+Всегда НОВОЕ задание, а не доработка старого"""
+    
+    # Добавляем инструкции для оценки и принятия решения
+    evaluation_instructions = f"""
 
-Если выполнено хорошо → повысь уровень до {next_level} и дай новое ДЗ в ТВОЕМ стиле.
-Если выполнено плохо → оставь уровень {user_level} и дай конкретные правки к текущему ДЗ в ТВОЕМ стиле.
+═════════════════════════════════════════════════════════════════════
+ВАЖНО: После анализа нужно принять решение о качестве выполнения ДЗ.
 
-Говори КАК {personality_name}. Используй его стиль общения, манеру речи, подход и философию. Кратко, по делу, без воды. Не используй звездочки или markdown форматирование.
+КРИТЕРИИ ПРИНЯТИЯ ОТЧЕТА (APPROVED: true):
+✅ Отчет содержит конкретные действия, планы или результаты
+✅ Есть измеримые метрики, цифры, сроки
+✅ Показано понимание задачи и применение знаний
+✅ Есть прогресс к цели, даже если частичный
+✅ Пользователь проявил инициативу и самостоятельность
 
-Верни ответ строго в формате:
+КРИТЕРИИ ОТКЛОНЕНИЯ (APPROVED: false) - ТОЛЬКО ЕСЛИ:
+❌ Отчет полностью пустой или состоит из 1-2 предложений без деталей
+❌ Нет никаких конкретных действий, только общие слова
+❌ Пользователь явно не понял задание и сделал что-то совершенно другое
+❌ Отчет показывает полное отсутствие усилий
+
+ВАЖНО: Если отчет качественный (есть каналы, бюджеты, метрики, действия) - ОБЯЗАТЕЛЬНО одобряй (APPROVED: true), даже если можно было сделать лучше. Не требуй идеала - требуй прогресса.
+
+После анализа верни ответ строго в формате:
 APPROVED: [true/false]
-FEEDBACK: [обратная связь в стиле {personality_name}, 2-3 предложения]
-NEW_LEVEL: [новый уровень, число]
-NEW_HOMEWORK_OR_REVISION: [новое ДЗ для нового уровня ИЛИ конкретные правки к текущему ДЗ в стиле {personality_name}. Если нужны правки (APPROVED: false), укажи ЧТО ИМЕННО нужно исправить и КАК это сделать, используя ТВОЙ подход. Будь конкретным и дай четкие инструкции. Не оставляй это поле пустым.]
+FEEDBACK: [обратная связь в стиле {personality_name}, используя структуру из анализа выше, 70% похвала + 30% критика]
+NEW_LEVEL: [новый уровень, число. Если APPROVED: true, то {next_level}, иначе {user_level}]
+NEW_HOMEWORK_OR_REVISION: [если APPROVED: true - новое ДЗ для уровня {next_level} в стиле {personality_name}. Если APPROVED: false - конкретные правки к текущему ДЗ, но НЕ переделка всего отчета, только что улучшить]
 
-ВАЖНО: Если требуется переделка (APPROVED: false), в NEW_HOMEWORK_OR_REVISION укажи конкретные действия, что нужно сделать для исправления, используя ТВОЙ подход и методы. Перечисли по пунктам, что именно не так и как это исправить.
-
-ВАЖНО: Не форматируй текст *. Пиши обычным текстом без звездочек и форматирования."""
+ВАЖНО: Не форматируй текст *. Пиши обычным текстом без звездочек и форматирования.
+"""
+    
+    full_prompt = analysis_prompt + evaluation_instructions
 
     response = await client.chat.completions.create(
         model=settings.OPENROUTER_MODEL,
         messages=[
             {"role": "system", "content": personality_data["system_prompt"]},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": full_prompt}
         ],
         temperature=0.7,
-        max_tokens=800
+        max_tokens=1200  # Увеличиваем для более детального анализа
     )
     
     result = response.choices[0].message.content
@@ -684,7 +766,7 @@ NEW_HOMEWORK_OR_REVISION: [новое ДЗ для нового уровня ИЛ
     feedback = result
     new_level = user_level
     new_homework_or_revision = ""
-    needs_revision = True  # По умолчанию требуются правки
+    needs_revision = False  # ИЗМЕНЕНО: по умолчанию НЕ требуются правки
     
     lines = result.split('\n')
     
@@ -692,7 +774,8 @@ NEW_HOMEWORK_OR_REVISION: [новое ДЗ для нового уровня ИЛ
         approved_line = [line for line in lines if 'APPROVED:' in line]
         if approved_line:
             approved_text = approved_line[0].split('APPROVED:')[-1].strip().lower()
-            needs_revision = 'false' in approved_text or 'нет' in approved_text or 'no' in approved_text
+            # ИЗМЕНЕНО: инвертируем логику - true означает НЕ нужны правки
+            needs_revision = not ('true' in approved_text or 'да' in approved_text or 'yes' in approved_text)
     
     if "FEEDBACK:" in result:
         feedback_start_idx = None

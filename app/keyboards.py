@@ -259,3 +259,19 @@ def get_subscription_cancel_confirmation_keyboard() -> InlineKeyboardMarkup:
         ]
     ])
 
+
+def get_roadmap_review_keyboard() -> InlineKeyboardMarkup:
+    """Создает клавиатуру для проверки роадмапа - упустил ли что-то сервис.
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками:
+            - "✅ Все учтено" - роадмап устраивает
+            - "❌ Что-то упущено" - нужно доработать роадмап
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Все учтено", callback_data="roadmap_approved"),
+            InlineKeyboardButton(text="❌ Что-то упущено", callback_data="roadmap_needs_revision")
+        ]
+    ])
+

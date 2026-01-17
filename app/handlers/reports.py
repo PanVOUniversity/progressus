@@ -8,7 +8,7 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models import User, Report
+from app.models import User, Report, Survey
 from app.gpt import evaluate_report_with_revision, clean_markdown
 from app.services.user_service import update_user_level, update_user_homework
 from app.database import get_db
@@ -95,12 +95,49 @@ async def process_report(message: Message, state: FSMContext):
         try:
             level_before = user.level
             personality_key = user.personality or "andrew_tate"
+            
+            # Получаем данные пользователя для промпта
+            user_goal = user.goal_3months or "достижение цели"
+            
+            # Определяем архетип на основе сфер развития
+            user_archetype = "Результат-ориентированный"  # по умолчанию
+            if user.development_spheres:
+                if "Разум" in user.development_spheres or "Коммуникации" in user.development_spheres:
+                    user_archetype = "Аналитичный"
+                if any(v in ["Лидерство", "Власть", "Влияние"] for v in (user.values or [])):
+                    user_archetype = "Лидерский"
+            
+            # Формируем строку ценностей
+            user_values = ", ".join(user.values[:3]) if user.values and len(user.values) > 0 else "Деньги, Власть, Действие"
+            
+            # Получаем ролевую модель из последнего опроса или используем personality
+            user_role_model = personality_key
+            try:
+                # Получаем последний опрос через запрос, чтобы избежать проблем с lazy loading
+                last_survey_result = await session.execute(
+                    select(Survey)
+                    .where(Survey.user_id == user_id)
+                    .order_by(Survey.created_at.desc())
+                    .limit(1)
+                )
+                last_survey = last_survey_result.scalar_one_or_none()
+                if last_survey and last_survey.role_model:
+                    user_role_model = last_survey.role_model
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Не удалось получить ролевую модель из опроса: {e}, используем {personality_key}")
+            
             feedback, new_level, homework_or_revision, needs_revision = await evaluate_report_with_revision(
                 user.level,
                 user.category or "finances",
                 report_text,
                 user.current_homework,
-                personality_key
+                personality_key,
+                user_goal=user_goal,
+                user_archetype=user_archetype,
+                user_values=user_values,
+                user_role_model=user_role_model
             )
             
             # Сохраняем отчет
@@ -256,8 +293,12 @@ async def process_report(message: Message, state: FSMContext):
             await session.commit()
             
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка при оценке отчета для пользователя {user_id}: {e}", exc_info=True)
             await message.answer(
-                "Произошла ошибка при оценке отчета. Попробуй позже."
+                f"Произошла ошибка при оценке отчета. Попробуй позже.\n\n"
+                f"Техническая информация: {str(e)[:200]}"
             )
         
         break

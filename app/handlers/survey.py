@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.states import SurveyStates
 from app.keyboards import (
     get_gender_keyboard, get_values_keyboard, get_development_spheres_keyboard,
-    get_role_model_keyboard, get_main_keyboard, get_payment_keyboard
+    get_role_model_keyboard, get_main_keyboard, get_payment_keyboard,
+    get_roadmap_review_keyboard
 )
 from app.gpt import generate_detailed_questions, generate_roadmap, generate_first_homework, _map_role_model_to_personality
 from app.models import Survey, User
@@ -683,6 +684,45 @@ async def process_goal_3months(message: Message, state: FSMContext):
     
     await state.update_data(goal_3months=goal_3months)
     
+    # Сохраняем состояние в БД перед запросом видения роадмапа
+    async for session in get_db():
+        try:
+            state_data = await state.get_data()
+            await save_survey_state(
+                session,
+                message.from_user.id,
+                str(SurveyStates.roadmap_vision),
+                state_data
+            )
+        except Exception as e:
+            logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
+        break
+    
+    # Переходим к запросу видения роадмапа
+    await state.set_state(SurveyStates.roadmap_vision)
+    await message.answer(
+        "Отлично! Перед тем, как я построю твой персональный роадмап, "
+        "расскажи, как ты видишь свой путь к этой цели?\n\n"
+        "Например, какие этапы или шаги ты уже представляешь? "
+        "Или что для тебя важно учесть в роадмапе?"
+    )
+
+
+@router.message(SurveyStates.roadmap_vision)
+async def process_roadmap_vision(message: Message, state: FSMContext):
+    """Обработка видения роадмапа от пользователя и генерация роадмапа."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь текстовое описание своего видения роадмапа")
+        return
+    
+    user_vision = message.text.strip()
+    
+    if len(user_vision) < 10:
+        await message.answer("Пожалуйста, опиши свое видение более подробно (минимум 10 символов)")
+        return
+    
+    await state.update_data(roadmap_vision=user_vision)
+    
     # Сохраняем состояние в БД перед генерацией роадмапа
     async for session in get_db():
         try:
@@ -690,20 +730,19 @@ async def process_goal_3months(message: Message, state: FSMContext):
             await save_survey_state(
                 session,
                 message.from_user.id,
-                str(SurveyStates.goal_3months),
+                str(SurveyStates.roadmap_generation),
                 state_data
             )
         except Exception as e:
             logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
         break
     
-    # Генерируем роадмап (без проверки премиума - оплата будет запрошена после первого ДЗ)
-    import logging
-    logger = logging.getLogger(__name__)
+    # Генерируем роадмап с учетом видения пользователя
     logger.info(f"Начинаем генерацию роадмапа для пользователя {message.from_user.id}")
     await message.answer("🗺️ Генерирую твой персональный роадмап достижения цели...")
     
     data = await state.get_data()
+    goal_3months = data.get("goal_3months")
     basic_answers = {
         "gender": data.get("gender"),
         "age": data.get("age"),
@@ -719,7 +758,8 @@ async def process_goal_3months(message: Message, state: FSMContext):
             goal_3months=goal_3months,
             basic_answers=basic_answers,
             detailed_answers=detailed_answers,
-            role_model=role_model
+            role_model=role_model,
+            user_vision=user_vision
         )
         
         await state.update_data(roadmap=roadmap)
@@ -816,81 +856,265 @@ async def process_goal_3months(message: Message, state: FSMContext):
             logger.error(f"Ошибка при сохранении данных в БД: {db_error}", exc_info=True)
             # Не прерываем процесс, так как роадмап уже успешно отправлен пользователю
         
-        # Генерируем первое ДЗ (отдельная обработка ошибок)
-        try:
-            await message.answer("📝 Генерирую твое первое персональное задание...")
-            
-            first_homework = await generate_first_homework(
-                basic_answers=basic_answers,
-                detailed_answers=detailed_answers,
-                goal_3months=goal_3months,
-                roadmap=roadmap,
-                role_model=role_model
-            )
-            
-            # Сохраняем первое ДЗ в БД (отдельная обработка ошибок)
-            homework_saved = False
+        # Сохраняем состояние в БД перед проверкой роадмапа
+        async for session in get_db():
             try:
-                async for session in get_db():
-                    try:
-                        # Сохраняем ДЗ
-                        user = await update_user_homework(session, message.from_user.id, first_homework)
-                        if user and user.current_homework:
-                            homework_saved = True
-                            logger.info(f"ДЗ успешно сохранено для пользователя {message.from_user.id}")
-                        else:
-                            logger.error(f"ДЗ не было сохранено для пользователя {message.from_user.id}")
-                        
-                        # Устанавливаем уровень 0
-                        from app.services.user_service import update_user_level
-                        await update_user_level(session, message.from_user.id, 0)
-                        break
-                    except Exception as save_error:
-                        logger.error(f"Ошибка при сохранении ДЗ в БД: {save_error}", exc_info=True)
-                        await session.rollback()
-                        break
-            except Exception as db_error:
-                logger.error(f"Ошибка при подключении к БД для сохранения ДЗ: {db_error}", exc_info=True)
-            
-            # Отправляем ДЗ только если оно успешно сохранено
-            if homework_saved:
-                # Очищаем сохраненное состояние опроса, так как опрос завершен
-                async for session in get_db():
-                    try:
-                        await clear_survey_state(session, message.from_user.id)
-                        break
-                    except Exception as e:
-                        logger.error(f"Ошибка очистки состояния: {e}", exc_info=True)
-                        break
-                
-                await state.set_state(SurveyStates.finish)
-                await state.clear()  # Очищаем FSM состояние
-                await message.answer(
-                    f"📝 Твое первое персональное задание (уровень 0):\n\n{first_homework}\n\n"
-                    "Выполни задание и отправь отчет текстом. Я оценю твою работу и дам обратную связь! 💪",
-                    reply_markup=get_main_keyboard()
+                state_data = await state.get_data()
+                await save_survey_state(
+                    session,
+                    message.from_user.id,
+                    str(SurveyStates.roadmap_review),
+                    state_data
                 )
-            else:
-                logger.error(f"Не удалось сохранить ДЗ для пользователя {message.from_user.id}, не отправляем ДЗ")
-                await state.set_state(SurveyStates.finish)
-                await message.answer(
-                    "Произошла ошибка при сохранении задания. Попробуй написать /start еще раз.",
-                    reply_markup=get_main_keyboard()
-                )
-        except Exception as hw_error:
-            logger.error(f"Ошибка при генерации первого ДЗ: {hw_error}", exc_info=True)
-            await state.set_state(SurveyStates.finish)
-            await message.answer(
-                "Произошла ошибка при генерации задания. Попробуй написать /start еще раз.",
-                reply_markup=get_main_keyboard()
-            )
+            except Exception as e:
+                logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
+            break
         
+        # Переходим к проверке роадмапа
+        await state.set_state(SurveyStates.roadmap_review)
+        await message.answer(
+            "Проверь роадмап. Упустил ли я что-то важное?",
+            reply_markup=get_roadmap_review_keyboard()
+        )
     except Exception as e:
         # Только ошибки генерации роадмапа попадают сюда
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Ошибка при генерации роадмапа: {e}", exc_info=True)
         await message.answer(
             "Произошла ошибка при генерации роадмапа. Попробуй позже или напиши /start"
+        )
+
+
+async def generate_and_send_first_homework(message: Message, state: FSMContext):
+    """Генерирует и отправляет первое ДЗ после одобрения роадмапа."""
+    data = await state.get_data()
+    goal_3months = data.get("goal_3months")
+    basic_answers = {
+        "gender": data.get("gender"),
+        "age": data.get("age"),
+        "name": data.get("name"),
+        "values": data.get("values", []),
+        "development_spheres": data.get("development_spheres", [])
+    }
+    detailed_answers = data.get("detailed_answers", {})
+    role_model = data.get("role_model", "Эндрю Тейт")
+    roadmap = data.get("roadmap")
+    
+    # Генерируем первое ДЗ (отдельная обработка ошибок)
+    try:
+        await message.answer("📝 Генерирую твое первое персональное задание...")
+        
+        first_homework = await generate_first_homework(
+            basic_answers=basic_answers,
+            detailed_answers=detailed_answers,
+            goal_3months=goal_3months,
+            roadmap=roadmap,
+            role_model=role_model
+        )
+        
+        # Сохраняем первое ДЗ в БД (отдельная обработка ошибок)
+        homework_saved = False
+        try:
+            async for session in get_db():
+                try:
+                    # Сохраняем ДЗ
+                    user = await update_user_homework(session, message.from_user.id, first_homework)
+                    if user and user.current_homework:
+                        homework_saved = True
+                        logger.info(f"ДЗ успешно сохранено для пользователя {message.from_user.id}")
+                    else:
+                        logger.error(f"ДЗ не было сохранено для пользователя {message.from_user.id}")
+                    
+                    # Устанавливаем уровень 0
+                    from app.services.user_service import update_user_level
+                    await update_user_level(session, message.from_user.id, 0)
+                    break
+                except Exception as save_error:
+                    logger.error(f"Ошибка при сохранении ДЗ в БД: {save_error}", exc_info=True)
+                    await session.rollback()
+                    break
+        except Exception as db_error:
+            logger.error(f"Ошибка при подключении к БД для сохранения ДЗ: {db_error}", exc_info=True)
+        
+        # Отправляем ДЗ только если оно успешно сохранено
+        if homework_saved:
+            # Очищаем сохраненное состояние опроса, так как опрос завершен
+            async for session in get_db():
+                try:
+                    await clear_survey_state(session, message.from_user.id)
+                    break
+                except Exception as e:
+                    logger.error(f"Ошибка очистки состояния: {e}", exc_info=True)
+                    break
+            
+            await state.set_state(SurveyStates.finish)
+            await state.clear()  # Очищаем FSM состояние
+            await message.answer(
+                f"📝 Твое первое персональное задание (уровень 0):\n\n{first_homework}\n\n"
+                "Выполни задание и отправь отчет текстом. Я оценю твою работу и дам обратную связь! 💪",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            logger.error(f"Не удалось сохранить ДЗ для пользователя {message.from_user.id}, не отправляем ДЗ")
+            await state.set_state(SurveyStates.finish)
+            await message.answer(
+                "Произошла ошибка при сохранении задания. Попробуй написать /start еще раз.",
+                reply_markup=get_main_keyboard()
+            )
+    except Exception as hw_error:
+        logger.error(f"Ошибка при генерации первого ДЗ: {hw_error}", exc_info=True)
+        await state.set_state(SurveyStates.finish)
+        await message.answer(
+            "Произошла ошибка при генерации задания. Попробуй написать /start еще раз.",
+            reply_markup=get_main_keyboard()
+        )
+
+
+@router.callback_query(F.data == "roadmap_approved", SurveyStates.roadmap_review)
+async def process_roadmap_approved(callback: CallbackQuery, state: FSMContext):
+    """Обработка одобрения роадмапа - переход к генерации первого ДЗ."""
+    await callback.answer()
+    await callback.message.edit_text("Отлично! Перехожу к генерации твоего первого задания...")
+    
+    # Генерируем и отправляем первое ДЗ
+    await generate_and_send_first_homework(callback.message, state)
+
+
+@router.callback_query(F.data == "roadmap_needs_revision", SurveyStates.roadmap_review)
+async def process_roadmap_needs_revision(callback: CallbackQuery, state: FSMContext):
+    """Обработка запроса на переделку роадмапа - переход к получению пожеланий."""
+    await callback.answer()
+    
+    # Сохраняем состояние в БД перед получением пожеланий
+    async for session in get_db():
+        try:
+            state_data = await state.get_data()
+            await save_survey_state(
+                session,
+                callback.from_user.id,
+                str(SurveyStates.roadmap_feedback),
+                state_data
+            )
+        except Exception as e:
+            logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
+        break
+    
+    await state.set_state(SurveyStates.roadmap_feedback)
+    await callback.message.edit_text(
+        "Понял! Расскажи, что именно нужно учесть или изменить в роадмапе?\n\n"
+        "Опиши свои пожелания подробно, чтобы я мог переделать роадмап с учетом твоих требований."
+    )
+
+
+@router.message(SurveyStates.roadmap_feedback)
+async def process_roadmap_feedback(message: Message, state: FSMContext):
+    """Обработка пожеланий по роадмапу и переделка роадмапа."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправь текстовое описание своих пожеланий")
+        return
+    
+    feedback = message.text.strip()
+    
+    if len(feedback) < 10:
+        await message.answer("Пожалуйста, опиши свои пожелания более подробно (минимум 10 символов)")
+        return
+    
+    await state.update_data(roadmap_feedback=feedback)
+    
+    # Получаем предыдущий роадмап и данные
+    data = await state.get_data()
+    previous_roadmap = data.get("roadmap")
+    goal_3months = data.get("goal_3months")
+    basic_answers = {
+        "gender": data.get("gender"),
+        "age": data.get("age"),
+        "name": data.get("name"),
+        "values": data.get("values", []),
+        "development_spheres": data.get("development_spheres", [])
+    }
+    detailed_answers = data.get("detailed_answers", {})
+    role_model = data.get("role_model", "Эндрю Тейт")
+    user_vision = data.get("roadmap_vision")
+    
+    # Генерируем переделанный роадмап
+    await message.answer("🗺️ Переделываю роадмап с учетом твоих пожеланий...")
+    
+    try:
+        roadmap = await generate_roadmap(
+            goal_3months=goal_3months,
+            basic_answers=basic_answers,
+            detailed_answers=detailed_answers,
+            role_model=role_model,
+            user_vision=user_vision,
+            feedback=feedback,
+            previous_roadmap=previous_roadmap
+        )
+        
+        await state.update_data(roadmap=roadmap)
+        
+        # Форматируем и показываем переделанный роадмап
+        roadmap_text = f"🗺️ РОАДМАП (обновлен): {goal_3months} за 3 месяца\n\n"
+        
+        # Показываем новый формат, если он есть
+        if roadmap.get('stage_1'):
+            for stage_num in [1, 2, 3, 4]:
+                stage_key = f'stage_{stage_num}'
+                stage = roadmap.get(stage_key, {})
+                if stage.get('goal'):
+                    weeks = stage.get('weeks', f'{stage_num*3-2}-{stage_num*3}')
+                    roadmap_text += f"📅 ЭТАП {stage_num} (Недели {weeks})\n"
+                    roadmap_text += f"   🎯 Milestone: {stage.get('goal', '')}\n"
+                    
+                    result = stage.get('result', '')
+                    if result:
+                        roadmap_text += f"   ✅ Результат: {result}\n"
+                    roadmap_text += "\n"
+        else:
+            # Fallback на старый формат для обратной совместимости
+            roadmap_text += "📅 Первая-вторая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_1_2', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Третья-четвертая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_3_4', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Пятая-восьмая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_5_8', {}).get('text', 'Цель будет определена позже')}\n\n"
+            
+            roadmap_text += "📅 Девятая-двенадцатая неделя: "
+            roadmap_text += f"{roadmap.get('weeks_9_12', {}).get('text', 'Цель будет определена позже')}\n\n"
+        
+        # Добавляем финальный результат и первый шаг
+        if roadmap.get('final_result'):
+            roadmap_text += f"🎯 ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: {roadmap.get('final_result')}\n\n"
+        
+        if roadmap.get('first_step'):
+            roadmap_text += f"🚀 ПЕРВЫЙ ШАГ СЕГОДНЯ: {roadmap.get('first_step')}"
+        
+        await message.answer(roadmap_text)
+        
+        # Сохраняем состояние в БД перед повторной проверкой роадмапа
+        async for session in get_db():
+            try:
+                state_data = await state.get_data()
+                await save_survey_state(
+                    session,
+                    message.from_user.id,
+                    str(SurveyStates.roadmap_review),
+                    state_data
+                )
+            except Exception as e:
+                logger.error(f"Ошибка сохранения состояния: {e}", exc_info=True)
+            break
+        
+        # Снова переходим к проверке роадмапа
+        await state.set_state(SurveyStates.roadmap_review)
+        await message.answer(
+            "Проверь обновленный роадмап. Упустил ли я что-то важное?",
+            reply_markup=get_roadmap_review_keyboard()
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при переделке роадмапа: {e}", exc_info=True)
+        await message.answer(
+            "Произошла ошибка при переделке роадмапа. Попробуй позже или напиши /start"
         )
 
