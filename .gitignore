@@ -66,3 +66,7 @@ ssh/progressus
 # Images and UML files (optional - remove if you want to track them)
 # description_before_start_and_commands.png
 # CJM.uml
+
+# Dev environment files
+.env.dev
+docker-compose.override.yml
