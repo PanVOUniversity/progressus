@@ -49,11 +49,36 @@ async def process_report(message: Message, state: FSMContext):
         Требует наличия premium доступа и активного домашнего задания.
         Не обрабатывает сообщения в состоянии консультации.
     """
-    # Проверяем, не находимся ли мы в состоянии консультации
+    # Проверяем, не находимся ли мы в состоянии опроса или консультации
     from app.states import SurveyStates
+    import logging
+    logger = logging.getLogger(__name__)
     current_state = await state.get_state()
-    if current_state == SurveyStates.consultation:
-        # Сообщение будет обработано обработчиком консультации
+    
+    # Логируем текущее состояние для диагностики
+    logger.info(f"Обработчик отчетов: пользователь {message.from_user.id}, состояние: {current_state}, текст: {message.text[:50] if message.text else 'None'}...")
+    
+    # Если пользователь находится в процессе опроса или консультации, не обрабатываем как отчет
+    # Состояние finish НЕ блокирует обработку отчетов, так как опрос уже завершен
+    if current_state in [
+        SurveyStates.consultation,
+        SurveyStates.gender,
+        SurveyStates.age,
+        SurveyStates.name,
+        SurveyStates.values,
+        SurveyStates.development_spheres,
+        SurveyStates.detailed_questions,
+        SurveyStates.role_model,
+        SurveyStates.goal_3months,
+        SurveyStates.roadmap_vision,
+        SurveyStates.roadmap_generation,
+        SurveyStates.roadmap_review,
+        SurveyStates.roadmap_feedback,
+        SurveyStates.personalization,
+        SurveyStates.promo_code
+    ]:
+        # Сообщение будет обработано соответствующим обработчиком опроса
+        logger.info(f"Сообщение не обрабатывается как отчет, так как пользователь в состоянии опроса: {current_state}")
         return
     
     user_id = message.from_user.id
@@ -85,7 +110,7 @@ async def process_report(message: Message, state: FSMContext):
         if not user.current_homework:
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Пользователь {user_id} пытается отправить отчет, но у него нет активного ДЗ")
+            logger.warning(f"Пользователь {user_id} пытается отправить отчет, но у него нет активного ДЗ. User level: {user.level}, goal_3months: {bool(user.goal_3months)}, roadmap: {bool(user.roadmap)}")
             await message.answer("У тебя нет активного ДЗ. Пройди опрос через /start")
             break
         

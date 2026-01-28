@@ -357,7 +357,7 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
         else:
             await message.edit_text(
                 "У тебя пока нет активного задания.\n\n"
-                "Пройди опрос через /start, чтобы получить первое персональное задание!",
+                "Пройди опрос через /restart, чтобы получить первое персональное задание!",
                 reply_markup=None
             )
             await message.answer(

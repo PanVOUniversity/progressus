@@ -411,10 +411,39 @@ async def successful_payment_handler(message: Message, bot: Bot, state: FSMConte
         from app.handlers.survey import generate_roadmap_after_payment
         await generate_roadmap_after_payment(message, state, bot)
     else:
-            await message.answer(
-                "✅ Premium доступ активирован!\n\n"
-                "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
-            )
+        # Проверяем, прошел ли пользователь опрос
+        async for session in get_db():
+            result = await session.execute(select(User).where(User.user_id == user_id))
+            user = result.scalar_one_or_none()
+            
+            if user and (not user.goal_3months and not user.roadmap):
+                # Пользователь еще не прошел опрос - начинаем опрос
+                from app.keyboards import get_gender_keyboard, get_main_keyboard
+                from app.states import SurveyStates
+                
+                await state.set_state(SurveyStates.gender)
+                await message.answer(
+                    "✅ Premium доступ активирован!\n\n"
+                    "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
+                    "📈 Progressus - твой лучший персональный наставник.\n\n"
+                    "✨ Топовые ролевые модели\n"
+                    "📝 Персональные задания\n\n"
+                    "Именно здесь ты реализуешь весь свой потенциал, но для начала "
+                    "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
+                    "Твой пол?",
+                    reply_markup=get_gender_keyboard()
+                )
+                await message.answer(
+                    "",
+                    reply_markup=get_main_keyboard()
+                )
+            else:
+                # Пользователь уже прошел опрос
+                await message.answer(
+                    "✅ Premium доступ активирован!\n\n"
+                    "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
+                )
+            break
 
 
 @router.callback_query(F.data == "promo_code_enter")

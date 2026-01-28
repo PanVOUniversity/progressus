@@ -260,18 +260,30 @@ def get_subscription_cancel_confirmation_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def get_roadmap_review_keyboard() -> InlineKeyboardMarkup:
+def get_roadmap_review_keyboard(has_previous_version: bool = False) -> InlineKeyboardMarkup:
     """Создает клавиатуру для проверки роадмапа - упустил ли что-то сервис.
+    
+    Args:
+        has_previous_version (bool): Если True, показывает кнопку "Назад" для отката
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с кнопками:
             - "✅ Все учтено" - роадмап устраивает
             - "❌ Что-то упущено" - нужно доработать роадмап
+            - "⬅️ Назад" - откатить к предыдущей версии (если has_previous_version=True)
     """
-    return InlineKeyboardMarkup(inline_keyboard=[
+    keyboard = [
         [
             InlineKeyboardButton(text="✅ Все учтено", callback_data="roadmap_approved"),
             InlineKeyboardButton(text="❌ Что-то упущено", callback_data="roadmap_needs_revision")
         ]
-    ])
+    ]
+    
+    # Добавляем кнопку "Назад" только если есть предыдущая версия
+    if has_previous_version:
+        keyboard.append([
+            InlineKeyboardButton(text="⬅️ Назад к предыдущей версии", callback_data="roadmap_rollback")
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 

@@ -46,7 +46,7 @@ async def get_or_create_user(session: AsyncSession, user_id: int, username: Opti
     return user
 
 
-async def update_user_level(session: AsyncSession, user_id: int, new_level: int) -> User:
+async def update_user_level(session: AsyncSession, user_id: int, new_level: int) -> Optional[User]:
     """Обновляет уровень пользователя.
     
     Обновляет уровень пользователя с ограничением максимумом 10.
@@ -57,7 +57,7 @@ async def update_user_level(session: AsyncSession, user_id: int, new_level: int)
         new_level (int): Новый уровень пользователя (будет ограничен до 10)
         
     Returns:
-        User: Обновленный объект пользователя
+        Optional[User]: Обновленный объект пользователя или None, если пользователь не найден
         
     Note:
         Уровень автоматически ограничивается максимумом 10.
@@ -70,7 +70,7 @@ async def update_user_level(session: AsyncSession, user_id: int, new_level: int)
     await session.commit()
     
     result = await session.execute(select(User).where(User.user_id == user_id))
-    return result.scalar_one()
+    return result.scalar_one_or_none()
 
 
 async def update_user_category(session: AsyncSession, user_id: int, category: str) -> User:

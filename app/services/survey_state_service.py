@@ -62,7 +62,7 @@ async def restore_survey_state(
     return None
 
 
-async def clear_survey_state(
+async def   clear_survey_state(
     session: AsyncSession,
     user_id: int
 ) -> None:
@@ -72,6 +72,16 @@ async def clear_survey_state(
         session (AsyncSession): Сессия БД
         user_id (int): ID пользователя
     """
+    # Проверяем, существует ли пользователь
+    result = await session.execute(
+        select(User).where(User.user_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # Пользователь не найден, ничего не делаем
+        return
+    
     await session.execute(
         update(User)
         .where(User.user_id == user_id)

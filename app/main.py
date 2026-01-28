@@ -538,7 +538,7 @@ async def yookassa_webhook_handler(request: Request):
                         except Exception as e:
                             logger.warning(f"Failed to delete payment message {message_id} for user {user_id}: {e}")
                     
-                    # Отправляем сообщение об успешной оплате и показываем меню
+                    # Отправляем сообщение об успешной оплате
                     try:
                         await bot.send_message(
                             user_id,
@@ -546,26 +546,49 @@ async def yookassa_webhook_handler(request: Request):
                             "Premium доступ активирован."
                         )
                         
-                        # Показываем меню (используем уже полученного пользователя)
-                        from app.keyboards import get_main_menu_keyboard, get_main_keyboard
-                        
-                        # Формируем текст меню
-                        user_name = user.name if user and user.name else None
-                        if user_name:
-                            menu_text = f"👋 Привет, {user_name}!\n\n"
+                        # Проверяем, прошел ли пользователь опрос
+                        if not user.goal_3months and not user.roadmap:
+                            # Пользователь еще не прошел опрос - начинаем опрос
+                            from app.keyboards import get_gender_keyboard, get_main_keyboard
+                            from app.states import SurveyStates
+                            
+                            await bot.send_message(
+                                user_id,
+                                "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
+                                "📈 Progressus - твой лучший персональный наставник.\n\n"
+                                "✨ Топовые ролевые модели\n"
+                                "📝 Персональные задания\n\n"
+                                "Именно здесь ты реализуешь весь свой потенциал, но для начала "
+                                "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
+                                "Твой пол?",
+                                reply_markup=get_gender_keyboard()
+                            )
+                            await bot.send_message(
+                                user_id,
+                                "",
+                                reply_markup=get_main_keyboard()
+                            )
                         else:
-                            menu_text = "👋 Привет!\n\n"
-                        menu_text += "📈 Progressus - твой лучший персональный наставник.\n\n"
-                        menu_text += "✨ Топовые ролевые модели\n"
-                        menu_text += "📝 Персональные задания\n\n"
-                        menu_text += "🎁 За 3 оплативших реферала - месяц Premium в подарок!"
-                        
-                        # Отправляем меню
-                        await bot.send_message(
-                            user_id,
-                            menu_text,
-                            reply_markup=get_main_menu_keyboard()
-                        )
+                            # Пользователь уже прошел опрос - показываем меню
+                            from app.keyboards import get_main_menu_keyboard
+                            
+                            # Формируем текст меню
+                            user_name = user.name if user and user.name else None
+                            if user_name:
+                                menu_text = f"👋 Привет, {user_name}!\n\n"
+                            else:
+                                menu_text = "👋 Привет!\n\n"
+                            menu_text += "📈 Progressus - твой лучший персональный наставник.\n\n"
+                            menu_text += "✨ Топовые ролевые модели\n"
+                            menu_text += "📝 Персональные задания\n\n"
+                            menu_text += "🎁 За 3 оплативших реферала - месяц Premium в подарок!"
+                            
+                            # Отправляем меню
+                            await bot.send_message(
+                                user_id,
+                                menu_text,
+                                reply_markup=get_main_menu_keyboard()
+                            )
                         
                     except Exception as e:
                         logger.warning(f"Failed to send notification to user {user_id}: {e}")
