@@ -6,6 +6,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, PreCheckoutQuery, Message, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 from aiogram.fsm.context import FSMContext
+from sqlalchemy import select, update
 from app.config import settings
 from app.models import Payment, User
 from app.services.user_service import activate_premium, deactivate_premium
@@ -51,13 +52,13 @@ async def start_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
     try:
         invoice_params = {
             "chat_id": callback.message.chat.id,
-            "title": "💎 Premium доступ",
+            "title": "Premium доступ",
             "description": (
                 "Premium включает:\n"
-                "✅ Персональный роадмап достижения цели\n"
-                "✅ Ежедневные задания от ИИ-коуча\n"
-                "✅ Обратная связь по отчетам\n"
-                "✅ Трекинг прогресса"
+                "- Персональный роадмап достижения цели\n"
+                "- Ежедневные задания от ИИ-коуча\n"
+                "- Обратная связь по отчетам\n"
+                "- Трекинг прогресса"
             ),
             "payload": f"premium_{user_id}_{int(datetime.utcnow().timestamp())}",
             "provider_token": settings.PROVIDER_TOKEN,
@@ -133,13 +134,13 @@ async def start_sbp_payment(callback: CallbackQuery, bot: Bot, state: FSMContext
         
         # Создаем клавиатуру с кнопкой для оплаты
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Оплатить через СБП", url=payment_data["confirmation_url"])],
-            [InlineKeyboardButton(text="❌ Отменить", callback_data="payment_sbp_cancel")]
+            [InlineKeyboardButton(text="Оплатить через СБП", url=payment_data["confirmation_url"])],
+            [InlineKeyboardButton(text="Отменить", callback_data="payment_sbp_cancel")]
         ])
         
         price_rub = settings.PREMIUM_PRICE // 100
         await callback.message.edit_text(
-            f"💎 Оплата Premium доступа через СБП\n\n"
+            f"Оплата Premium доступа через СБП\n\n"
             f"Сумма: {price_rub} руб.\n\n"
             f"Нажми на кнопку ниже, чтобы перейти к оплате.\n"
             f"После успешной оплаты premium доступ будет активирован автоматически.",
@@ -180,18 +181,18 @@ async def cancel_sbp_payment(callback: CallbackQuery, bot: Bot, state: FSMContex
         
         if premium_active:
             await callback.message.edit_text(
-                "💎 У тебя уже есть Premium доступ!\n\n"
+                "У тебя уже есть Premium доступ!\n\n"
                 "Ты можешь пользоваться всеми функциями бота.",
                 reply_markup=get_payment_keyboard(has_premium=True)
             )
         else:
             await callback.message.edit_text(
-                f"💎 Premium доступ\n\n"
+                f"Premium доступ\n\n"
                 f"Premium включает:\n"
-                f"✅ Персональный роадмап достижения цели\n"
-                f"✅ Ежедневные задания от ИИ-коуча\n"
-                f"✅ Обратная связь по отчетам\n"
-                f"✅ Трекинг прогресса\n\n"
+                f"- Персональный роадмап достижения цели\n"
+                f"- Ежедневные задания от ИИ-коуча\n"
+                f"- Обратная связь по отчетам\n"
+                f"- Трекинг прогресса\n\n"
                 f"Стоимость: {price_rub} руб./месяц",
                 reply_markup=get_payment_keyboard(has_premium=False)
             )
@@ -212,12 +213,12 @@ async def cancel_subscription(callback: CallbackQuery, bot: Bot):
     
     await callback.answer()
     await callback.message.edit_text(
-        "⚠️ Ты уверен, что хочешь отключить подписку?\n\n"
+        "Ты уверен, что хочешь отключить подписку?\n\n"
         "Подписка будет остановлена, и ты потеряешь доступ к:\n"
-        "❌ Персональному роадмапу\n"
-        "❌ Ежедневным заданиям\n"
-        "❌ Обратной связи по отчетам\n"
-        "❌ Трекингу прогресса\n\n"
+        "- Персональному роадмапу\n"
+        "- Ежедневным заданиям\n"
+        "- Обратной связи по отчетам\n"
+        "- Трекингу прогресса\n\n"
         "Для продолжения работы нужно будет активировать подписку снова.",
         reply_markup=get_subscription_cancel_confirmation_keyboard()
     )
@@ -241,7 +242,7 @@ async def confirm_subscription_cancel(callback: CallbackQuery, bot: Bot):
             await deactivate_premium(session, user_id)
             
             await callback.message.edit_text(
-                "❌ Подписка отключена\n\n"
+                "Подписка отключена\n\n"
                 "Premium доступ деактивирован. Для продолжения работы активируй подписку снова."
             )
             await callback.answer("Подписка отключена")
@@ -281,18 +282,18 @@ async def cancel_subscription_cancel(callback: CallbackQuery, bot: Bot):
         
         if premium_active:
             await callback.message.edit_text(
-                "💎 У тебя уже есть Premium доступ!\n\n"
+                "У тебя уже есть Premium доступ!\n\n"
                 "Ты можешь пользоваться всеми функциями бота.",
                 reply_markup=get_payment_keyboard(has_premium=True)
             )
         else:
             await callback.message.edit_text(
-                f"💎 Premium доступ\n\n"
+                f"Premium доступ\n\n"
                 f"Premium включает:\n"
-                f"✅ Персональный роадмап достижения цели\n"
-                f"✅ Ежедневные задания от ИИ-коуча\n"
-                f"✅ Обратная связь по отчетам\n"
-                f"✅ Трекинг прогресса\n\n"
+                f"- Персональный роадмап достижения цели\n"
+                f"- Ежедневные задания от ИИ-коуча\n"
+                f"- Обратная связь по отчетам\n"
+                f"- Трекинг прогресса\n\n"
                 f"Стоимость: {price_rub} руб./месяц",
                 reply_markup=get_payment_keyboard(has_premium=False)
             )
@@ -368,7 +369,6 @@ async def successful_payment_handler(message: Message, bot: Bot, state: FSMConte
             await activate_premium(session, user_id, months=1)
             
             # Повышаем уровень до 1 при первой оплате
-            from sqlalchemy import select, update
             result = await session.execute(select(User).where(User.user_id == user_id))
             user = result.scalar_one_or_none()
             
@@ -392,7 +392,7 @@ async def successful_payment_handler(message: Message, bot: Bot, state: FSMConte
             logger.error(f"Ошибка при обработке платежа для пользователя {user_id}: {e}", exc_info=True)
             await session.rollback()
             await message.answer(
-                "❌ Произошла ошибка при активации premium доступа.\n"
+                "Произошла ошибка при активации premium доступа.\n"
                 "Платеж прошел успешно, но активация не завершена.\n"
                 "Обратитесь к администратору."
             )
@@ -405,16 +405,45 @@ async def successful_payment_handler(message: Message, bot: Bot, state: FSMConte
     if pending_roadmap:
         # Убираем флаг и продолжаем генерацию роадмапа
         await state.update_data(pending_roadmap=False)
-        await message.answer("✅ Premium доступ активирован! Генерирую роадмап...")
+        await message.answer("Premium доступ активирован! Генерирую роадмап...")
         
         # Импортируем функцию генерации роадмапа
         from app.handlers.survey import generate_roadmap_after_payment
         await generate_roadmap_after_payment(message, state, bot)
     else:
-            await message.answer(
-                "✅ Premium доступ активирован!\n\n"
-                "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report"
-            )
+        # Проверяем, прошел ли пользователь опрос
+        async for session in get_db():
+            result = await session.execute(select(User).where(User.user_id == user_id))
+            user = result.scalar_one_or_none()
+            
+            if user and (not user.goal_3months and not user.roadmap):
+                # Пользователь еще не прошел опрос - начинаем опрос
+                from app.keyboards import get_gender_keyboard, get_main_keyboard
+                from app.states import SurveyStates
+                
+                await state.set_state(SurveyStates.gender)
+                await message.answer(
+                    "Premium доступ активирован!\n\n"
+                    "Привет! Ты попал в пространство развития Progressus.\n\n"
+                    "Progressus - твой лучший персональный наставник.\n\n"
+                    "- Топовые ролевые модели\n"
+                    "- Персональные задания\n\n"
+                    "Именно здесь ты реализуешь весь свой потенциал, но для начала "
+                    "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
+                    "Твой пол?",
+                    reply_markup=get_gender_keyboard()
+                )
+                await message.answer(
+                    "",
+                    reply_markup=get_main_keyboard()
+                )
+            else:
+                # Пользователь уже прошел опрос
+                await message.answer(
+                    "Premium доступ активирован!\n\n"
+                    "Теперь тебе доступен весь функционал бота!"
+                )
+            break
 
 
 @router.callback_query(F.data == "promo_code_enter")
@@ -431,7 +460,7 @@ async def enter_promo_code(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.promo_code)
     
     await callback.message.edit_text(
-        "🎟️ Введи промокод:\n\n"
+        "Введи промокод:\n\n"
         "Напиши промокод для активации premium доступа.",
         reply_markup=None
     )
@@ -463,18 +492,18 @@ async def process_promo_code(message: Message, state: FSMContext):
             
             if premium_active:
                 await message.answer(
-                    "💎 У тебя уже есть Premium доступ!\n\n"
+                    "У тебя уже есть Premium доступ!\n\n"
                     "Ты можешь пользоваться всеми функциями бота.",
                     reply_markup=get_payment_keyboard(has_premium=True)
                 )
             else:
                 await message.answer(
-                    f"💎 Premium доступ\n\n"
+                    f"Premium доступ\n\n"
                     f"Premium включает:\n"
-                    f"✅ Персональный роадмап достижения цели\n"
-                    f"✅ Ежедневные задания от ИИ-коуча\n"
-                    f"✅ Обратная связь по отчетам\n"
-                    f"✅ Трекинг прогресса\n\n"
+                    f"- Персональный роадмап достижения цели\n"
+                    f"- Ежедневные задания от ИИ-коуча\n"
+                    f"- Обратная связь по отчетам\n"
+                    f"- Трекинг прогресса\n\n"
                     f"Стоимость: {price_rub} руб./месяц",
                     reply_markup=get_payment_keyboard(has_premium=False)
                 )
@@ -493,9 +522,9 @@ async def process_promo_code(message: Message, state: FSMContext):
                 await session.commit()
                 
                 await message.answer(
-                    "✅ Промокод активирован!\n\n"
+                    "Промокод активирован!\n\n"
                     "Premium доступ активирован на длительный срок.\n"
-                    "Теперь ты получаешь ежедневные задания и можешь отправлять отчеты через /report",
+                    "Теперь тебе доступен веь функционал бота!",
                     reply_markup=get_main_keyboard()
                 )
                 
@@ -504,7 +533,7 @@ async def process_promo_code(message: Message, state: FSMContext):
             except Exception as e:
                 logger.error(f"Ошибка при активации промокода для пользователя {user_id}: {e}", exc_info=True)
                 await message.answer(
-                    "❌ Произошла ошибка при активации промокода. Попробуй позже.",
+                    "Произошла ошибка при активации промокода. Попробуй позже.",
                     reply_markup=get_main_keyboard()
                 )
             break
@@ -513,7 +542,7 @@ async def process_promo_code(message: Message, state: FSMContext):
     else:
         # Неверный промокод
         await message.answer(
-            "❌ Неверный промокод.\n\n"
+            "Неверный промокод.\n\n"
             "Проверь правильность ввода и попробуй еще раз.\n"
             "Для отмены напиши 'Отмена' или 'Назад'.",
             reply_markup=get_main_keyboard()

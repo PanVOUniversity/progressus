@@ -18,7 +18,7 @@ router = Router()
 
 
 @router.message(F.command("restart"))
-@router.message(F.text.in_(["/restart", "🔄 Рестарт"]))
+@router.message(F.text.in_(["/restart", "Рестарт"]))
 @router.message(F.text.startswith("/restart"))
 async def cmd_restart(message: Message, state: FSMContext):
     """Обработка команды рестарта - запрос подтверждения.
@@ -27,7 +27,7 @@ async def cmd_restart(message: Message, state: FSMContext):
     кроме premium статуса, и запрашивает подтверждение.
     
     Args:
-        message (Message): Сообщение с текстом кнопки "🔄 Рестарт"
+        message (Message): Сообщение с текстом кнопки "Рестарт"
         state (FSMContext): Контекст FSM для перехода в состояние подтверждения
     """
     import logging
@@ -35,14 +35,14 @@ async def cmd_restart(message: Message, state: FSMContext):
     logger.info(f"Restart command received from user {message.from_user.id}, text: {message.text}")
     await state.set_state(SurveyStates.restart_confirmation)
     await message.answer(
-        "⚠️ Внимание! Рестарт сбросит все твои данные:\n"
-        "• Уровень\n"
-        "• Категория и прогресс\n"
-        "• Рефералы\n"
-        "• Домашние задания\n"
-        "• Отчеты\n"
-        "• Персонализация (все ответы и вопросы)\n\n"
-        "❌ Premium статус НЕ будет сброшен.\n\n"
+        "Внимание! Рестарт сбросит все твои данные:\n"
+        "- Уровень\n"
+        "- Категория и прогресс\n"
+        "- Рефералы\n"
+        "- Домашние задания\n"
+        "- Отчеты\n"
+        "- Персонализация (все ответы и вопросы)\n\n"
+        "Premium статус НЕ будет сброшен.\n\n"
         "Ты уверен, что хочешь продолжить?",
         reply_markup=get_restart_confirmation_keyboard()
     )
@@ -72,11 +72,11 @@ async def restart_confirm(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.gender)
     
     await callback.message.edit_text(
-        "✅ Данные успешно сброшены!\n\n"
-        "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-        "📈 Progressus - твой лучший персональный наставник.\n\n"
-        "✨ Топовые ролевые модели\n"
-        "📝 Персональные задания\n\n"
+        "Данные успешно сброшены!\n\n"
+        "Привет! Ты попал в пространство развития Progressus.\n\n"
+        "Progressus - твой лучший персональный наставник.\n\n"
+        "- Топовые ролевые модели\n"
+        "- Персональные задания\n\n"
         "Именно здесь ты реализуешь весь свой потенциал, но для начала "
         "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
         "Твой пол?",
@@ -96,7 +96,7 @@ async def restart_cancel(callback: CallbackQuery, state: FSMContext):
         state (FSMContext): Контекст FSM для сброса состояния подтверждения
     """
     await state.clear()
-    await callback.message.edit_text("❌ Рестарт отменен.")
+    await callback.message.edit_text("Рестарт отменен.")
     # Устанавливаем постоянную клавиатуру
     await callback.message.answer(
         "Меню:",

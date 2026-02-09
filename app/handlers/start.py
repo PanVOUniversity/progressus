@@ -12,9 +12,11 @@ from app.states import SurveyStates
 from app.services.user_service import get_or_create_user
 from app.services.referral_service import process_referral
 from app.services.survey_state_service import restore_survey_state, clear_survey_state
-from app.keyboards import get_privacy_consent_keyboard, get_gender_keyboard, get_main_keyboard, get_values_keyboard, get_development_spheres_keyboard, get_role_model_keyboard
+from app.keyboards import get_privacy_consent_keyboard, get_gender_keyboard, get_main_keyboard, get_values_keyboard, get_development_spheres_keyboard, get_role_model_keyboard, get_payment_keyboard
 from app.database import get_db
 from app.handlers.menu import show_main_menu
+from app.services.user_service import is_premium_active
+from app.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,13 +73,13 @@ async def restore_survey_from_db(message: Message, state: FSMContext) -> bool:
                             elif state_name == "values":
                                 await message.answer(
                                     "Выбери 3 своих основных ценности в жизни:\n"
-                                    "(Можно выбрать несколько, затем нажми '✅ Готово')",
+                                    "(Можно выбрать несколько, затем нажми 'Готово')",
                                     reply_markup=get_values_keyboard()
                                 )
                             elif state_name == "development_spheres":
                                 await message.answer(
                                     "Выбери сферы, в которых хочешь развиваться:\n"
-                                    "(Можно выбрать несколько, затем нажми '✅ Готово')",
+                                    "(Можно выбрать несколько, затем нажми 'Готово')",
                                     reply_markup=get_development_spheres_keyboard()
                                 )
                             elif state_name == "detailed_questions":
@@ -135,6 +137,28 @@ async def cmd_start(message: Message, state: FSMContext):
         
         # Проверяем, дал ли пользователь согласие на ПД
         if user.privacy_consent_accepted:
+            # Проверяем premium доступ
+            premium_active = await is_premium_active(session, user_id)
+            
+            if not premium_active:
+                # Premium нет - показываем экран оплаты
+                price_rub = settings.PREMIUM_PRICE // 100
+                await message.answer(
+                    "Привет! Добро пожаловать в Progressus!\n\n"
+                    "Progressus - твой персональный наставник для достижения целей.\n\n"
+                    "Для начала работы нужен Premium доступ\n\n"
+                    "Premium включает:\n"
+                    "- Персональный роадмап достижения цели\n"
+                    "- Ежедневные задания от ИИ-коуча\n"
+                    "- Обратная связь по отчетам\n"
+                    "- Трекинг прогресса\n\n"
+                    f"Стоимость: {price_rub} руб./месяц\n\n"
+                    "Оплати подписку, чтобы начать свой путь к успеху!",
+                    reply_markup=get_payment_keyboard()
+                )
+                break
+            
+            # Premium есть - продолжаем как обычно
             # Проверяем, прошел ли пользователь опрос (есть цель или роадмап)
             if user.goal_3months or user.roadmap:
                 # Пользователь уже прошел опрос - показываем меню
@@ -147,34 +171,34 @@ async def cmd_start(message: Message, state: FSMContext):
                 if not restored:
                     # Состояние не восстановлено - начинаем опрос с начала
                     await state.set_state(SurveyStates.gender)
-            await message.answer(
-                        "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-                        "📈 Progressus - твой лучший персональный наставник.\n\n"
-                        "✨ Топовые ролевые модели\n"
-                        "📝 Персональные задания\n\n"
-                "Именно здесь ты реализуешь весь свой потенциал, но для начала "
-                "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
-                        "Твой пол?",
-                        reply_markup=get_gender_keyboard()
-            )
+                await message.answer(
+                            "Привет! Ты попал в пространство развития Progressus.\n\n"
+                            "Progressus - твой лучший персональный наставник.\n\n"
+                            "- Топовые ролевые модели\n"
+                            "- Персональные задания\n\n"
+                    "Именно здесь ты реализуешь весь свой потенциал, но для начала "
+                    "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
+                            "Твой пол?",
+                            reply_markup=get_gender_keyboard()
+                )
         else:
             # Показываем согласие на ПД
             await state.set_state(SurveyStates.privacy_consent)
             await message.answer(
-                "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-                "📈 Progressus - это бот для твоего личного развития. "
+                "Привет! Ты попал в пространство развития Progressus.\n\n"
+                "Progressus - это бот для твоего личного развития. "
                 "Наша задача - добиться твоего ежедневного роста. "
                 "Каждый день ты будешь в общении с нами получать рекомендации "
                 "исходя из твоих целей и навыков.\n\n"
-                "✨ Топовые ролевые модели\n"
-                "📝 Персональные задания\n\n"
+                "- Топовые ролевые модели\n"
+                "- Персональные задания\n\n"
                 "Для работы бота нам необходимо твое согласие на обработку персональных данных.",
                 reply_markup=get_privacy_consent_keyboard()
             )
         break
 
 
-@router.message(F.text.startswith("/start"))
+@router.message(F.text.startswith("/start "))
 async def cmd_start_with_ref(message: Message, state: FSMContext):
     """Обработка команды /start с реферальной ссылкой.
     
@@ -212,6 +236,28 @@ async def cmd_start_with_ref(message: Message, state: FSMContext):
         
         # Проверяем согласие на ПД
         if user.privacy_consent_accepted:
+            # Проверяем premium доступ
+            premium_active = await is_premium_active(session, user_id)
+            
+            if not premium_active:
+                # Premium нет - показываем экран оплаты
+                price_rub = settings.PREMIUM_PRICE // 100
+                await message.answer(
+                    "Привет! Добро пожаловать в Progressus!\n\n"
+                    "Progressus - твой персональный наставник для достижения целей.\n\n"
+                    "Для начала работы нужен Premium доступ\n\n"
+                    "Premium включает:\n"
+                    "- Персональный роадмап достижения цели\n"
+                    "- Ежедневные задания от ИИ-коуча\n"
+                    "- Обратная связь по отчетам\n"
+                    "- Трекинг прогресса\n\n"
+                    f"Стоимость: {price_rub} руб./месяц\n\n"
+                    "Оплати подписку, чтобы начать свой путь к успеху!",
+                    reply_markup=get_payment_keyboard()
+                )
+                break
+            
+            # Premium есть - продолжаем как обычно
             # Проверяем, прошел ли пользователь опрос (есть цель или роадмап)
             if user.goal_3months or user.roadmap:
                 # Пользователь уже прошел опрос - показываем меню
@@ -224,26 +270,26 @@ async def cmd_start_with_ref(message: Message, state: FSMContext):
                 if not restored:
                     # Состояние не восстановлено - начинаем опрос с начала
                     await state.set_state(SurveyStates.gender)
-            await message.answer(
-                        "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-                        "📈 Progressus - твой лучший персональный наставник.\n\n"
-                        "✨ Топовые ролевые модели\n"
-                        "📝 Персональные задания\n\n"
-                "Именно здесь ты реализуешь весь свой потенциал, но для начала "
-                "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
-                        "Твой пол?",
-                        reply_markup=get_gender_keyboard()
-            )
+                await message.answer(
+                            "Привет! Ты попал в пространство развития Progressus.\n\n"
+                            "Progressus - твой лучший персональный наставник.\n\n"
+                            "- Топовые ролевые модели\n"
+                            "- Персональные задания\n\n"
+                    "Именно здесь ты реализуешь весь свой потенциал, но для начала "
+                    "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
+                            "Твой пол?",
+                            reply_markup=get_gender_keyboard()
+                )
         else:
             await state.set_state(SurveyStates.privacy_consent)
             await message.answer(
-                "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-                "📈 Progressus - это бот для твоего личного развития. "
+                "Привет! Ты попал в пространство развития Progressus.\n\n"
+                "Progressus - это бот для твоего личного развития. "
                 "Наша задача - добиться твоего ежедневного роста. "
                 "Каждый день ты будешь в общении с нами получать рекомендации "
                 "исходя из твоих целей и навыков.\n\n"
-                "✨ Топовые ролевые модели\n"
-                "📝 Персональные задания\n\n"
+                "- Топовые ролевые модели\n"
+                "- Персональные задания\n\n"
                 "Для работы бота нам необходимо твое согласие на обработку персональных данных.",
                 reply_markup=get_privacy_consent_keyboard()
             )

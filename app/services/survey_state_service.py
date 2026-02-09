@@ -6,7 +6,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models import User
-from app.states import SurveyStates
 from typing import Optional, Dict, Any
 
 
@@ -72,6 +71,16 @@ async def clear_survey_state(
         session (AsyncSession): Сессия БД
         user_id (int): ID пользователя
     """
+    # Проверяем, существует ли пользователь
+    result = await session.execute(
+        select(User).where(User.user_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # Пользователь не найден, ничего не делаем
+        return
+    
     await session.execute(
         update(User)
         .where(User.user_id == user_id)

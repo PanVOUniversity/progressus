@@ -74,14 +74,14 @@ def get_values_keyboard(selected_values: list[str] = None) -> InlineKeyboardMark
     keyboard = []
     for value_text, callback_data in value_buttons:
         if value_text in selected_values:
-            button_text = f"✅ {value_text}"
+            button_text = f"• {value_text}"
         else:
             button_text = value_text
         keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
     
     # Кнопка "Готово" с количеством выбранных
     count = len(selected_values)
-    done_text = f"✅ Готово (выбрано {count})"
+    done_text = f"Готово (выбрано {count})"
     keyboard.append([InlineKeyboardButton(text=done_text, callback_data="values_done")])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -97,7 +97,7 @@ def get_development_spheres_keyboard(selected_spheres: list[str] = None) -> Inli
         InlineKeyboardMarkup: Клавиатура с сферами:
             - Заработок, Отношения, Здоровье/Тело
             - Разум, Коммуникации
-            - ✅ Готово
+            - Готово
     """
     if selected_spheres is None:
         selected_spheres = []
@@ -115,13 +115,13 @@ def get_development_spheres_keyboard(selected_spheres: list[str] = None) -> Inli
     keyboard = []
     for sphere_text, callback_data in sphere_buttons:
         if sphere_text in selected_spheres:
-            button_text = f"✅ {sphere_text}"
+            button_text = f"• {sphere_text}"
         else:
             button_text = sphere_text
         keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
     
     # Кнопка "Готово"
-    keyboard.append([InlineKeyboardButton(text="✅ Готово", callback_data="spheres_done")])
+    keyboard.append([InlineKeyboardButton(text="Готово", callback_data="spheres_done")])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -160,13 +160,13 @@ def get_payment_keyboard(has_premium: bool = False) -> InlineKeyboardMarkup:
     
     if has_premium:
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отключить подписку", callback_data="subscription_cancel")]
+            [InlineKeyboardButton(text="Отключить подписку", callback_data="subscription_cancel")]
         ])
     else:
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"💳 Оплатить {price_rub} руб.", callback_data="payment_start")],
-            [InlineKeyboardButton(text="💳 Оплатить через СБП", callback_data="payment_sbp_start")],
-            [InlineKeyboardButton(text="🎟️ Ввести промокод", callback_data="promo_code_enter")]
+            [InlineKeyboardButton(text=f"Оплатить {price_rub} руб.", callback_data="payment_start")],
+            [InlineKeyboardButton(text="Оплатить через СБП", callback_data="payment_sbp_start")],
+            [InlineKeyboardButton(text="Ввести промокод", callback_data="promo_code_enter")]
         ])
 
 
@@ -178,11 +178,11 @@ def get_share_referral_keyboard(referral_link: str) -> InlineKeyboardMarkup:
         
     Returns:
         InlineKeyboardMarkup: Клавиатура с кнопкой поделиться ссылкой:
-            - "📤 Поделиться ссылкой" - открывает Telegram Share
+            - "Поделиться ссылкой" - открывает Telegram Share
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text="📤 Поделиться ссылкой",
+            text="Поделиться ссылкой",
             url=f"https://t.me/share/url?url={referral_link}&text=Присоединяйся к Progressus!"
         )]
     ])
@@ -217,11 +217,11 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     Returns:
         ReplyKeyboardMarkup: Постоянная клавиатура с кнопками:
             - "Меню" - возврат в главное меню
-            - "🔄 Рестарт" - рестарт бота (с подтверждением)
+            - "Рестарт" - рестарт бота (с подтверждением)
     """
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Меню"), KeyboardButton(text="🔄 Рестарт")]
+            [KeyboardButton(text="Меню"), KeyboardButton(text="Рестарт")]
         ],
         resize_keyboard=True,
         persistent=True
@@ -233,13 +233,13 @@ def get_restart_confirmation_keyboard() -> InlineKeyboardMarkup:
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с кнопками подтверждения:
-            - "✅ Да, рестарт" - подтверждение рестарта
-            - "❌ Отмена" - отмена рестарта
+            - "Да, рестарт" - подтверждение рестарта
+            - "Отмена" - отмена рестарта
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Да, рестарт", callback_data="restart_confirm"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="restart_cancel")
+            InlineKeyboardButton(text="Да, рестарт", callback_data="restart_confirm"),
+            InlineKeyboardButton(text="Отмена", callback_data="restart_cancel")
         ]
     ])
 
@@ -249,29 +249,41 @@ def get_subscription_cancel_confirmation_keyboard() -> InlineKeyboardMarkup:
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с кнопками подтверждения:
-            - "✅ Да, отключить" - подтверждение отключения
-            - "❌ Отмена" - отмена отключения
+            - "Да, отключить" - подтверждение отключения
+            - "Отмена" - отмена отключения
     """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Да, отключить", callback_data="subscription_cancel_confirm"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="subscription_cancel_cancel")
+            InlineKeyboardButton(text="Да, отключить", callback_data="subscription_cancel_confirm"),
+            InlineKeyboardButton(text="Отмена", callback_data="subscription_cancel_cancel")
         ]
     ])
 
 
-def get_roadmap_review_keyboard() -> InlineKeyboardMarkup:
+def get_roadmap_review_keyboard(has_previous_version: bool = False) -> InlineKeyboardMarkup:
     """Создает клавиатуру для проверки роадмапа - упустил ли что-то сервис.
+    
+    Args:
+        has_previous_version (bool): Если True, показывает кнопку "Назад" для отката
     
     Returns:
         InlineKeyboardMarkup: Клавиатура с кнопками:
-            - "✅ Все учтено" - роадмап устраивает
-            - "❌ Что-то упущено" - нужно доработать роадмап
+            - "Все учтено" - роадмап устраивает
+            - "Что-то упущено" - нужно доработать роадмап
+            - "Назад" - откатить к предыдущей версии (если has_previous_version=True)
     """
-    return InlineKeyboardMarkup(inline_keyboard=[
+    keyboard = [
         [
-            InlineKeyboardButton(text="✅ Все учтено", callback_data="roadmap_approved"),
-            InlineKeyboardButton(text="❌ Что-то упущено", callback_data="roadmap_needs_revision")
+            InlineKeyboardButton(text="Все учтено", callback_data="roadmap_approved"),
+            InlineKeyboardButton(text="Что-то упущено", callback_data="roadmap_needs_revision")
         ]
-    ])
+    ]
+    
+    # Добавляем кнопку "Назад" только если есть предыдущая версия
+    if has_previous_version:
+        keyboard.append([
+            InlineKeyboardButton(text="Назад к предыдущей версии", callback_data="roadmap_rollback")
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 

@@ -41,7 +41,7 @@ async def send_referral_info(message: Message, bot: Bot, state: FSMContext = Non
     
     # Формируем сообщение
     stats_text = (
-        f"📊 Статистика рефералов:\n"
+        f"Статистика рефералов:\n"
         f"• Всего рефералов: {stats['total_referrals']}\n"
         f"• Оплатили премиум: {stats['paid_referrals']}\n"
     )
@@ -53,7 +53,7 @@ async def send_referral_info(message: Message, bot: Bot, state: FSMContext = Non
             f"({stats['referrals_for_premium']} = +1 месяц премиума)"
         )
     else:
-        stats_text += "• ✅ Достаточно рефералов для получения месяца бесплатного премиума!"
+        stats_text += "• Достаточно рефералов для получения месяца бесплатного премиума!"
     
     sent_message = await message.answer(
         f"🔗 Твоя реферальная ссылка:\n{referral_link}\n\n{stats_text}",
@@ -114,9 +114,9 @@ async def cmd_continue(message: Message, state: FSMContext):
             await message.bot.delete_message(chat_id=user_id, message_id=last_referral_message_id)
             # Очищаем сохраненный message_id
             await state.update_data(last_referral_message_id=None)
-            await message.answer("✅ Готово! Можешь продолжать переписку.")
+            await message.answer("Готово! Можешь продолжать переписку.")
         except Exception as e:
             # Если сообщение уже удалено или произошла ошибка, просто продолжаем
-            await message.answer("✅ Готово! Можешь продолжать переписку.")
+            await message.answer("Готово! Можешь продолжать переписку.")
     else:
         await message.answer("Нет сообщений с реферальной ссылкой для удаления.")

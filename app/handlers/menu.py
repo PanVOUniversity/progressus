@@ -74,11 +74,11 @@ async def show_main_menu(message: Message, state: FSMContext = None, user: User 
     user_name = user.name if user and user.name else message.from_user.first_name or "друг"
     
     # Формируем текст меню согласно дизайну
-    menu_text = f"👋 Привет, {user_name}!\n\n"
-    menu_text += "📈 Progressus - твой лучший персональный наставник.\n\n"
-    menu_text += "✨ Топовые ролевые модели\n"
-    menu_text += "📝 Персональные задания\n\n"
-    menu_text += "🎁 За 3 оплативших реферала - месяц Premium в подарок!"
+    menu_text = f"Привет, {user_name}!\n\n"
+    menu_text += "Progressus - твой лучший персональный наставник.\n\n"
+    menu_text += "- Топовые ролевые модели\n"
+    menu_text += "- Персональные задания\n\n"
+    menu_text += "За 3 оплативших реферала - месяц Premium в подарок!"
     
     # Отправляем сообщение с inline кнопками меню под текстом
     await message.answer(
@@ -123,7 +123,7 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         if not user or not user.personality:
             await safe_callback_answer(callback, "Сначала пройди опрос через /start, чтобы выбрать своего наставника.")
             await message.edit_text(
-                "💬 Свободная консультация\n\n"
+                "Свободная консультация\n\n"
                 "Сначала пройди опрос через /start, чтобы выбрать своего наставника.",
                 reply_markup=None
             )
@@ -141,8 +141,8 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         if not premium_active and user.consultation_used:
             await safe_callback_answer(callback, "Бесплатная консультация доступна только один раз", show_alert=True)
             await message.edit_text(
-                "💬 Свободная консультация\n\n"
-                "❌ Ты уже использовал бесплатную консультацию.\n\n"
+                "Свободная консультация\n\n"
+                "Ты уже использовал бесплатную консультацию.\n\n"
                 "Для неограниченных консультаций активируй Premium доступ через меню 'Оплата'.",
                 reply_markup=None
             )
@@ -159,20 +159,21 @@ async def cmd_consultation(callback: CallbackQuery, state: FSMContext):
         # Показываем предупреждение, если это первая и последняя бесплатная консультация
         if not premium_active and not user.consultation_used:
             await message.edit_text(
-                "💬 Свободная консультация\n\n"
-                "⚠️ Бесплатная консультация доступна только один раз.\n\n"
+                "Свободная консультация\n\n"
+                "Бесплатная консультация доступна только один раз.\n\n"
                 "Задай мне любой вопрос, и я помогу тебе разобраться в стиле твоего наставника.\n\n"
                 "Напиши свой вопрос:",
                 reply_markup=None
             )
         else:
             await message.edit_text(
-                "💬 Свободная консультация\n\n"
+                "Свободная консультация\n\n"
                 "Задай мне любой вопрос, и я помогу тебе разобраться в стиле твоего наставника.\n\n"
                 "Напиши свой вопрос:",
                 reply_markup=None
             )
         await message.answer(
+            "",
             reply_markup=get_main_keyboard()
         )
         break
@@ -192,9 +193,9 @@ async def process_consultation(message: Message, state: FSMContext):
     user_question = message.text
     
     # Проверяем, не является ли это командой меню или рестарта
-    if user_question in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
+    if user_question in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "Рестарт", "/restart"]:
         # Если это рестарт, выходим из консультации и позволяем обработчику рестарта обработать
-        if user_question in ["🔄 Рестарт", "/restart"]:
+        if user_question in ["Рестарт", "/restart"]:
             await state.clear()
             return  # Позволяем обработчику рестарта обработать сообщение
         await state.clear()
@@ -220,7 +221,7 @@ async def process_consultation(message: Message, state: FSMContext):
         
         if not premium_active and user.consultation_used:
             await message.answer(
-                "❌ Ты уже использовал бесплатную консультацию.\n\n"
+                "Ты уже использовал бесплатную консультацию.\n\n"
                 "Для неограниченных консультаций активируй Premium доступ через меню 'Оплата'.",
                 reply_markup=get_main_keyboard()
             )
@@ -235,7 +236,7 @@ async def process_consultation(message: Message, state: FSMContext):
         personality_data = get_personality_prompt(user.personality)
         
         # Показываем, что бот думает
-        await message.answer("💭 Думаю...")
+        await message.answer("Думаю...")
         
         try:
             prompt = f"""Пользователь задал вопрос: {user_question}
@@ -340,14 +341,14 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
             # Проверяем, требуется ли переделка
             if user.homework_needs_revision:
                 await message.edit_text(
-                    f"📝 Твое текущее задание (уровень {user.level}):\n\n{user.current_homework}\n\n"
-                    "⚠️ Это задание требует переделки. Выполни его с учетом правок и отправь отчет текстом.",
+                    f"Твое текущее задание (уровень {user.level}):\n\n{user.current_homework}\n\n"
+                    "Это задание требует переделки. Выполни его с учетом правок и отправь отчет текстом.",
                     reply_markup=None
                 )
             else:
                 await message.edit_text(
-                    f"📝 Твое текущее задание (уровень {user.level}):\n\n{user.current_homework}\n\n"
-                    "Выполни задание и отправь отчет текстом. Я оценю твою работу и дам обратную связь! 💪",
+                    f"Твое текущее задание (уровень {user.level}):\n\n{user.current_homework}\n\n"
+                    "Выполни задание и отправь отчет текстом. Я оценю твою работу и дам обратную связь.",
                     reply_markup=None
                 )
             await message.answer(
@@ -357,7 +358,7 @@ async def cmd_tasks(callback: CallbackQuery, state: FSMContext):
         else:
             await message.edit_text(
                 "У тебя пока нет активного задания.\n\n"
-                "Пройди опрос через /start, чтобы получить первое персональное задание!",
+                "Пройди опрос через /restart, чтобы получить первое персональное задание!",
                 reply_markup=None
             )
             await message.answer(
@@ -396,18 +397,18 @@ async def cmd_payment(callback: CallbackQuery, state: FSMContext):
         
         if premium_active:
             await message.edit_text(
-                "💎 У тебя уже есть Premium доступ!\n\n"
+                "У тебя уже есть Premium доступ!\n\n"
                 "Ты можешь пользоваться всеми функциями бота.",
                 reply_markup=get_payment_keyboard(has_premium=True)
             )
         else:
             await message.edit_text(
-                f"💎 Premium доступ\n\n"
+                f"Premium доступ\n\n"
                 f"Premium включает:\n"
-                f"✅ Персональный роадмап достижения цели\n"
-                f"✅ Ежедневные задания от ИИ-коуча\n"
-                f"✅ Обратная связь по отчетам\n"
-                f"✅ Трекинг прогресса\n\n"
+                f"- Персональный роадмап достижения цели\n"
+                f"- Ежедневные задания от ИИ-коуча\n"
+                f"- Обратная связь по отчетам\n"
+                f"- Трекинг прогресса\n\n"
                 f"Стоимость: {price_rub} руб./месяц",
                 reply_markup=get_payment_keyboard(has_premium=False)
             )
@@ -447,7 +448,7 @@ async def cmd_referral_program(callback: CallbackQuery, state: FSMContext):
         
         # Формируем сообщение
         stats_text = (
-            f"📊 Статистика рефералов:\n"
+            f"Статистика рефералов:\n"
             f"• Всего рефералов: {stats['total_referrals']}\n"
             f"• Оплатили премиум: {stats['paid_referrals']}\n"
         )
@@ -458,10 +459,10 @@ async def cmd_referral_program(callback: CallbackQuery, state: FSMContext):
             )
         
         referral_text = (
-            f"💰 Реферальная программа\n\n"
+            f"Реферальная программа\n\n"
             f"Твоя реферальная ссылка:\n`{referral_link}`\n\n"
             f"{stats_text}\n"
-            f"🎁 За {stats['referrals_for_premium']} оплативших реферала - месяц Premium в подарок!"
+            f"За {stats['referrals_for_premium']} оплативших реферала - месяц Premium в подарок!"
         )
         
         await safe_callback_answer(callback)

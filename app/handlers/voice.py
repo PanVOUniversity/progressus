@@ -235,22 +235,22 @@ async def handle_voice(message: Message, state: FSMContext):
         voice_data = voice_bytes.read()
     except Exception as e:
         logger.error(f"Ошибка скачивания голосового сообщения: {e}")
-        await message.answer("❌ Ошибка при обработке голосового сообщения")
+        await message.answer("Ошибка при обработке голосового сообщения")
         return
     
     # Проверяем наличие API ключа
     if not settings.YANDEX_SPEECHKIT_API_KEY:
         logger.error("Не указан API ключ для Yandex SpeechKit")
-        await message.answer("❌ Ошибка: не настроен Yandex SpeechKit (отсутствует API ключ)")
+        await message.answer("Ошибка: не настроен Yandex SpeechKit (отсутствует API ключ)")
         return
     
     # Распознаем аудио (с автоматической разбивкой на части, если нужно)
     try:
         # Показываем сообщение о начале обработки
         if voice.duration and voice.duration > MAX_SYNC_DURATION:
-            await message.answer(f"⏳ Обрабатываю длинное сообщение ({voice.duration} сек), это может занять время...")
+            await message.answer(f"Обрабатываю длинное сообщение ({voice.duration} сек), это может занять время...")
         else:
-            await message.answer("⏳ Распознаю голосовое сообщение...")
+            await message.answer("Распознаю голосовое сообщение...")
         
         text = await split_and_recognize_audio(
             voice_data, 
@@ -260,7 +260,7 @@ async def handle_voice(message: Message, state: FSMContext):
         
         if text and text.strip():
             # Отправляем распознанный текст пользователю
-            await message.answer(f"🎤 Распознано: {text}")
+            await message.answer(f"Распознано: {text}")
             
             # Создаем новое текстовое сообщение с распознанным текстом
             # и обрабатываем его через диспетчер
@@ -322,7 +322,7 @@ async def handle_voice(message: Message, state: FSMContext):
                 except Exception as direct_error:
                     logger.error(f"Ошибка при прямой обработке: {direct_error}", exc_info=True)
         else:
-            await message.answer("❌ Не удалось распознать речь. Попробуйте еще раз.")
+            await message.answer("Не удалось распознать речь. Попробуйте еще раз.")
             return
                 
     except httpx.HTTPStatusError as e:
@@ -332,8 +332,8 @@ async def handle_voice(message: Message, state: FSMContext):
         except:
             pass
         logger.error(f"HTTP ошибка при распознавании речи: {e.response.status_code} - {error_response}")
-        await message.answer(f"❌ Ошибка при распознавании речи (HTTP {e.response.status_code}). Проверьте логи.")
+        await message.answer(f"Ошибка при распознавании речи (HTTP {e.response.status_code}). Проверьте логи.")
     except Exception as e:
         logger.error(f"Ошибка при распознавании речи: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка: {str(e)}")
+        await message.answer(f"Ошибка: {str(e)}")
 

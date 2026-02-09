@@ -11,17 +11,7 @@ from typing import Callable, Awaitable, Dict, Any
 
 
 class RateLimitMiddleware(BaseMiddleware):
-    """Middleware для ограничения частоты запросов от пользователей.
-    
-    Ограничивает количество запросов от одного пользователя до 30 запросов
-    в минуту. Запросы сверх лимита игнорируются.
-    
-    Attributes:
-        requests (Dict[int, list]): Словарь с временными метками запросов по user_id
-        max_requests (int): Максимальное количество запросов (30)
-        time_window (timedelta): Временное окно для подсчета запросов (1 минута)
-    """
-    
+        
     def __init__(self):
         """Инициализирует middleware с настройками rate limiting."""
         self.requests: Dict[int, list] = defaultdict(list)

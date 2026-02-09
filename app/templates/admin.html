@@ -164,7 +164,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>📊 Админка Progressus</h1>
+        <h1>Админка Progressus</h1>
         <p class="subtitle">Генерация Excel отчетов с аналитикой</p>
         
         <form id="reportForm" onsubmit="generateReport(event)">
@@ -255,7 +255,7 @@
                     errorDiv.style.display = 'block';
                 } else if (data.downloadUrl) {
                     const fullUrl = window.location.origin + data.downloadUrl;
-                    successDiv.innerHTML = `✅ Отчет успешно сгенерирован!<br><a href="${fullUrl}" class="download-link" download>📥 Скачать Excel файл</a>`;
+                    successDiv.innerHTML = `Отчет успешно сгенерирован!<br><a href="${fullUrl}" class="download-link" download>Скачать Excel файл</a>`;
                     successDiv.style.display = 'block';
                 } else {
                     errorDiv.textContent = 'Неожиданный формат ответа от сервера';
