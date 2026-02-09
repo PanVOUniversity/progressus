@@ -28,6 +28,7 @@ from app.models import Payment, User
 from sqlalchemy import select, update
 
 # Настройка логирования
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -81,7 +82,7 @@ async def setup_bot_commands(bot: Bot):
         bot (Bot): Экземпляр Telegram бота
     """
     commands = [
-        BotCommand(command="restart", description="� Рестарт бота (сброс данных) кроме "),
+        BotCommand(command="restart", description="Рестарт бота (сброс данных) кроме "),
         BotCommand(command="menu", description="Главное меню"),
     ]
     
@@ -542,7 +543,7 @@ async def yookassa_webhook_handler(request: Request):
                     try:
                         await bot.send_message(
                             user_id,
-                            "✅ Успешно оплачено!\n\n"
+                            "Успешно оплачено!\n\n"
                             "Premium доступ активирован."
                         )
                         
@@ -554,10 +555,10 @@ async def yookassa_webhook_handler(request: Request):
                             
                             await bot.send_message(
                                 user_id,
-                                "👋 Привет! Ты попал в пространство развития Progressus.\n\n"
-                                "📈 Progressus - твой лучший персональный наставник.\n\n"
-                                "✨ Топовые ролевые модели\n"
-                                "📝 Персональные задания\n\n"
+                                "Привет! Ты попал в пространство развития Progressus.\n\n"
+                                "Progressus - твой лучший персональный наставник.\n\n"
+                                "- Топовые ролевые модели\n"
+                                "- Персональные задания\n\n"
                                 "Именно здесь ты реализуешь весь свой потенциал, но для начала "
                                 "давай пройдем небольшой опрос, чтобы лучше тебя понять.\n\n"
                                 "Твой пол?",
@@ -575,13 +576,13 @@ async def yookassa_webhook_handler(request: Request):
                             # Формируем текст меню
                             user_name = user.name if user and user.name else None
                             if user_name:
-                                menu_text = f"👋 Привет, {user_name}!\n\n"
+                                menu_text = f"Привет, {user_name}!\n\n"
                             else:
-                                menu_text = "👋 Привет!\n\n"
-                            menu_text += "📈 Progressus - твой лучший персональный наставник.\n\n"
-                            menu_text += "✨ Топовые ролевые модели\n"
-                            menu_text += "📝 Персональные задания\n\n"
-                            menu_text += "🎁 За 3 оплативших реферала - месяц Premium в подарок!"
+                                menu_text = "Привет!\n\n"
+                            menu_text += "Progressus - твой лучший персональный наставник.\n\n"
+                            menu_text += "- Топовые ролевые модели\n"
+                            menu_text += "- Персональные задания\n\n"
+                            menu_text += "За 3 оплативших реферала - месяц Premium в подарок!"
                             
                             # Отправляем меню
                             await bot.send_message(

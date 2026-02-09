@@ -6,7 +6,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models import User
-from app.states import SurveyStates
 from typing import Optional, Dict, Any
 
 
@@ -62,7 +61,7 @@ async def restore_survey_state(
     return None
 
 
-async def   clear_survey_state(
+async def clear_survey_state(
     session: AsyncSession,
     user_id: int
 ) -> None:

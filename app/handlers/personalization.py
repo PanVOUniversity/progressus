@@ -249,7 +249,7 @@ async def cmd_personalization(callback: CallbackQuery, state: FSMContext):
         
         if not premium_active and personalization_used:
             await message.answer(
-                "❌ Ты уже использовал бесплатную персонализацию.\n\n"
+                "Ты уже использовал бесплатную персонализацию.\n\n"
                 "Для неограниченной персонализации активируй Premium доступ через меню 'Оплата'.",
                 reply_markup=get_main_keyboard()
             )
@@ -263,7 +263,7 @@ async def cmd_personalization(callback: CallbackQuery, state: FSMContext):
         
         if question_count >= 20:
             await message.answer(
-                "✅ Отлично! Собрал 20/20 вопросов — теперь у меня полная картина твоей личности, болей, стиля и ресурсов.\n\n"
+                "Отлично! Собрал 20/20 вопросов — теперь у меня полная картина твоей личности, болей, стиля и ресурсов.\n\n"
                 "Теперь переходим только к точным заданиям, рекомендациям и движению к твоей цели. "
                 "Без лишних вопросов — только результат!\n\n"
                 "Напиши, что тебя интересует, и я дам конкретные рекомендации.",
@@ -298,7 +298,7 @@ async def process_personalization_answer(message: Message, state: FSMContext):
     user_answer = message.text
     
     # Проверяем, не является ли это командой выхода
-    if user_answer in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "🔄 Рестарт", "/restart"]:
+    if user_answer in ["Меню", "/menu", "menu", "Свободная консультация", "Задания", "Оплата", "Реферальная программа", "Рестарт", "/restart"]:
         # Сохраняем данные в БД перед выходом
         await save_personalization_data(user_id, state)
         await state.clear()
@@ -329,7 +329,7 @@ async def process_personalization_answer(message: Message, state: FSMContext):
         
         if not premium_active and personalization_used:
             await message.answer(
-                "❌ Ты уже использовал бесплатную персонализацию.\n\n"
+                "Ты уже использовал бесплатную персонализацию.\n\n"
                 "Для неограниченной персонализации активируй Premium доступ через меню 'Оплата'.",
                 reply_markup=get_main_keyboard()
             )
@@ -392,7 +392,7 @@ async def process_personalization_answer(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Ошибка при обработке ответа персонализации: {e}", exc_info=True)
             await message.answer(
-                "❌ Произошла ошибка при обработке ответа. Попробуй еще раз.",
+                "Произошла ошибка при обработке ответа. Попробуй еще раз.",
                 reply_markup=get_main_keyboard()
             )
         

@@ -90,7 +90,7 @@ async def process_report(message: Message, state: FSMContext):
         user = result.scalar_one_or_none()
         
         if not user:
-            await message.answer("Сначала пройди опрос через /start")
+            await message.answer("Сначала пройди опрос через /restart")
             break
         
         # Проверяем, это ли первый отчет (уровень 0 и нет отчетов в БД)
@@ -104,14 +104,14 @@ async def process_report(message: Message, state: FSMContext):
         if not is_first_report:
             from app.services.user_service import is_premium_active
             if not await is_premium_active(session, user_id):
-                await message.answer("Для отправки отчетов нужен Premium доступ. Активируй его через /start")
+                await message.answer("Для отправки отчетов нужен Premium доступ. Активируй его через /menu")
                 break
         
         if not user.current_homework:
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f"Пользователь {user_id} пытается отправить отчет, но у него нет активного ДЗ. User level: {user.level}, goal_3months: {bool(user.goal_3months)}, roadmap: {bool(user.roadmap)}")
-            await message.answer("У тебя нет активного ДЗ. Пройди опрос через /start")
+            await message.answer("У тебя нет активного ДЗ. Пройди опрос через /restart")
             break
         
         # Оцениваем отчет через GPT
@@ -193,7 +193,7 @@ async def process_report(message: Message, state: FSMContext):
                 
                 level_up_text = ""
                 if new_level > level_before:
-                    level_up_text = f"\n\n🎉 Твой уровень повышен с {level_before} до {new_level}!"
+                    level_up_text = f"\n\nТвой уровень повышен с {level_before} до {new_level}!"
                 
                 # Очищаем feedback от маркеров GPT
                 clean_feedback = feedback
@@ -233,7 +233,7 @@ async def process_report(message: Message, state: FSMContext):
                                 clean_homework = clean_homework[1:].strip()
                 
                 await message.answer(
-                    f"✅ Красавчик! Ты проделал отличную работу!\n\n"
+                    f"Красавчик! Ты проделал отличную работу!\n\n"
                     f"{clean_markdown(clean_feedback)}{level_up_text}\n\n"
                     f"Новый уровень: {new_level}\nНовое домашнее задание:\n{clean_markdown(clean_homework)}"
                 )
@@ -244,12 +244,12 @@ async def process_report(message: Message, state: FSMContext):
                     from app.config import settings
                     price_rub = settings.PREMIUM_PRICE // 100
                     await message.answer(
-                        f"💎 Для продолжения работы нужен Premium доступ\n\n"
+                        f"Для продолжения работы нужен Premium доступ\n\n"
                         f"Premium включает:\n"
-                        f"✅ Персональный роадмап достижения цели\n"
-                        f"✅ Ежедневные задания от ИИ-коуча\n"
-                        f"✅ Обратная связь по отчетам\n"
-                        f"✅ Трекинг прогресса\n\n"
+                        f"- Персональный роадмап достижения цели\n"
+                        f"- Ежедневные задания от ИИ-коуча\n"
+                        f"- Обратная связь по отчетам\n"
+                        f"- Трекинг прогресса\n\n"
                         f"Стоимость: {price_rub} руб./месяц",
                         reply_markup=get_payment_keyboard()
                     )
@@ -295,7 +295,7 @@ async def process_report(message: Message, state: FSMContext):
                 
                 await message.answer(
                     f"{clean_markdown(clean_feedback)}\n\n"
-                    f"📝 Правки к ДЗ:\n{clean_markdown(clean_homework)}\n\n"
+                    f"Правки к ДЗ:\n{clean_markdown(clean_homework)}\n\n"
                     f"Переделай задание с учетом этих правок и отправь новый отчет."
                 )
                 
@@ -305,12 +305,12 @@ async def process_report(message: Message, state: FSMContext):
                     from app.config import settings
                     price_rub = settings.PREMIUM_PRICE // 100
                     await message.answer(
-                        f"💎 Для продолжения работы нужен Premium доступ\n\n"
+                        f"Для продолжения работы нужен Premium доступ\n\n"
                         f"Premium включает:\n"
-                        f"✅ Персональный роадмап достижения цели\n"
-                        f"✅ Ежедневные задания от ИИ-коуча\n"
-                        f"✅ Обратная связь по отчетам\n"
-                        f"✅ Трекинг прогресса\n\n"
+                        f"- Персональный роадмап достижения цели\n"
+                        f"- Ежедневные задания от ИИ-коуча\n"
+                        f"- Обратная связь по отчетам\n"
+                        f"- Трекинг прогресса\n\n"
                         f"Стоимость: {price_rub} руб./месяц",
                         reply_markup=get_payment_keyboard()
                     )
